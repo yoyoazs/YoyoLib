@@ -4,7 +4,7 @@ A simple module for node.js
 # Installation
 
 ```bash
-npm install discord.js
+npm install yoyolib
 ```
 
 
