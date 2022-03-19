@@ -36,7 +36,7 @@ log : allows to save in the log file or not
 These three parameters are set to "true" by default
 
 ```js
-logger.log({content: "%FR%test log"})
+logger.log({content: "%FRtest log"})
 ```
 Allows to log in the console in red
 
