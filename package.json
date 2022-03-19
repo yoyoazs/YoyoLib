@@ -1,0 +1,27 @@
+{
+  "name": "ylib",
+  "version": "1.0.0",
+  "description": "A sample package for logger",
+  "main": "index.js",
+  "directories": {
+    "lib": "lib"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yoyoazs/YLib.git"
+  },
+  "keywords": [
+    "logger",
+    "js",
+    "javascript"
+  ],
+  "author": "yoyoazs",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/yoyoazs/YLib/issues"
+  },
+  "homepage": "https://github.com/yoyoazs/YLib#readme"
+}
