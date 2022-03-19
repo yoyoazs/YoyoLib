@@ -1,4 +1,4 @@
-# YLib
+# YoyoLib
 A simple module for node.js
 
 # Installation
