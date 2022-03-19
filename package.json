@@ -1,5 +1,5 @@
 {
-  "name": "ylib",
+  "name": "yoyolib",
   "version": "1.0.0",
   "description": "A sample package for logger",
   "main": "index.js",
@@ -11,7 +11,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/yoyoazs/YLib.git"
+    "url": "git+https://github.com/yoyoazs/YoyoLib.git"
   },
   "keywords": [
     "logger",
@@ -21,7 +21,7 @@
   "author": "yoyoazs",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/yoyoazs/YLib/issues"
+    "url": "https://github.com/yoyoazs/YoyoLib/issues"
   },
-  "homepage": "https://github.com/yoyoazs/YLib#readme"
+  "homepage": "https://github.com/yoyoazs/YoyoLib#readme"
 }
