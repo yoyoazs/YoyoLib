@@ -1,11 +1,11 @@
 # YLib
 A simple module for node.js
 
-#Installation
+# Installation
 
 npm install discord.js
 
-#Example usage
+# Example usage
 
 const YoyoLib = require('yoyolib')
 
