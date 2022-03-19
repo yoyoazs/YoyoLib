@@ -24,7 +24,7 @@ logger.warn("test warn");
 logger.error(content: "test error");
 ```
 
-# Experiment usage
+# Experienced usage
 
 ```js
 logger.log({content: "test log", date: false, console: false, log: false});
