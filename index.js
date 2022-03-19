@@ -1,3 +1,3 @@
 "use strict";
 
-module.exports = require('./lib/YLib.js');
+module.exports = require('./lib/YoyoLib.js');
