@@ -29,9 +29,9 @@ logger.error("test error");
 ```js
 logger.log({content: "test log", date: false, console: false, log: false});
 ```
-date: allows to display the date or not\n
-console: allows to display in the console or not\n
-log : allows to save in the log file or not\n\n
+date: allows to display the date or not
+console: allows to display in the console or not
+log : allows to save in the log file or not
 
 These three parameters are set to "true" by default
 
