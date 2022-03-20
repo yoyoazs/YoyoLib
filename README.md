@@ -21,7 +21,7 @@ logger.info("test info");
 //Print a warn on a console
 logger.warn("test warn");
 //Print a error on a console
-logger.error(content: "test error");
+logger.error("test error");
 ```
 
 # Experienced usage
