@@ -13,9 +13,10 @@ npm install yoyolib
 
 # Example usage
 
+## logger
 ```js
-const YoyoLib = require('yoyolib')
-const logger = YoyoLib.createLogger()
+const YoyoLib = require('yoyolib');
+const logger = YoyoLib.createLogger();
 
 //Print a log on a console
 logger.log("test log");
@@ -27,8 +28,55 @@ logger.warn("test warn");
 logger.error(content: "test error");
 ```
 
+## multilang
+
+### json file
+
+```json
+
+//en_EN
+{
+    "message": {
+        "test": "this is a test",
+        "testVariables" : "Hello {user}"
+    }
+}
+
+//fr_FR
+{
+    "message": {
+        "test": "ceci est un test",
+        "testVariables" : "Bonjour {user}"
+    }
+}
+
+```
+Create a languages ​​folder and put your fr_FR and en_EN folders there
+
+## js
+
+```js
+const multiLang = YoyoLib.createMultiLang();
+
+multiLang.add("fr_FR", "fr_FR");
+multiLang.add("en_EN", "en_EN");
+
+multiLang.set("fr_FR");
+
+console.log(multiLang.use("message.test"));
+//print ceci est un test
+
+multiLang.set("en_EN");
+console.log(multiLang.use("message.test"));
+//print this is a test
+
+console.log(multiLang.use("message.testVariables", {user: "yoyoazs"}));
+//print Hello yoyoazs
+```
+
 # Experienced usage
 
+## logger
 ```js
 logger.log({content: "test log", date: false, console: false, log: false});
 ```
@@ -39,7 +87,7 @@ log : allows to save in the log file or not<br>
 These three parameters are set to "true" by default
 
 ```js
-logger.log({content: "%FRtest log"})
+logger.log({content: "%FRtest log"});
 ```
 Allows to log in the console in red<br>
 
