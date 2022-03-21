@@ -51,7 +51,7 @@ logger.error(content: "test error");
 }
 
 ```
-Create a languages ​​folder and put your fr_FR and en_EN folders there
+Create a folder named lang and put your fr_FR and en_EN folders there
 
 ## js
 
