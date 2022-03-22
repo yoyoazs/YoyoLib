@@ -1,7 +1,7 @@
 {
   "name": "yoyolib",
-  "version": "1.1.2",
-  "description": "A sample package for logger and multilang",
+  "version": "1.1.4",
+  "description": "A sample package for logger",
   "main": "index.js",
   "directories": {
     "lib": "lib"
@@ -16,13 +16,16 @@
   "keywords": [
     "logger",
     "js",
-    "javascript",
-    "multilang"
+    "javascript"
   ],
   "author": "yoyoazs",
   "license": "ISC",
   "bugs": {
     "url": "https://github.com/yoyoazs/YoyoLib/issues"
   },
-  "homepage": "https://github.com/yoyoazs/YoyoLib#readme"
+  "homepage": "https://github.com/yoyoazs/YoyoLib#readme",
+  "dependencies": {
+    "fs": "^0.0.1-security",
+    "path": "^0.12.7"
+  }
 }
