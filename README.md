@@ -10,7 +10,6 @@ A simple module for node.js
 npm install yoyolib
 ```
 
-
 # Example usage
 
 ## logger
