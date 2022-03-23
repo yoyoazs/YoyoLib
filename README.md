@@ -71,6 +71,8 @@ console.log(multiLang.use("message.test"));
 //print this is a test
 ```
 
+for more information look a wiki https://github.com/yoyoazs/YoyoLib/wiki
+
 [stars-shield]: https://img.shields.io/github/stars/yoyoazs/YoyoLib.svg?style=for-the-badge
 [stars-url]: https://github.com/yoyoazs/YoyoLib/stargazers
 [issues-shield]: https://img.shields.io/github/issues/yoyoazs/YoyoLib.svg?style=for-the-badge
