@@ -1,6 +1,6 @@
 {
   "name": "yoyolib",
-  "version": "1.2.2",
+  "version": "1.2.0",
   "description": "A sample package for logger",
   "main": "index.js",
   "directories": {
