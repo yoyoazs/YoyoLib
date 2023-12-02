@@ -1,6 +1,6 @@
 {
   "name": "yoyolib",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "A sample package for logger",
   "main": "index.js",
   "directories": {
@@ -8,7 +8,7 @@
   },
   "scripts": {
     "test": "node index.js",
-	"release": "release-it"
+    "release": "release-it"
   },
   "repository": {
     "type": "git",
