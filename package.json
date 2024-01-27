@@ -1,6 +1,6 @@
 {
   "name": "yoyolib",
-  "version": "2.3.1",
+  "version": "2.4.0",
   "description": "A sample package for logger",
   "main": "index.js",
   "directories": {
@@ -21,14 +21,12 @@
     "multilang"
   ],
   "author": "yoyoazs",
-  "license": "ISC",
+  "license": "YoyoLib Custom License",
   "bugs": {
     "url": "https://github.com/yoyoazs/YoyoLib/issues"
   },
   "homepage": "https://github.com/yoyoazs/YoyoLib#readme",
   "dependencies": {
-    "ansi-escapes": "^6.2.0",
-    "esm": "^3.2.25",
     "fs": "^0.0.1-security",
     "path": "^0.12.7"
   }
