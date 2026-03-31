@@ -1,6 +1,6 @@
 {
   "name": "yoyolib",
-  "version": "5.0.0",
+  "version": "5.0.1",
   "description": "A lightweight Node.js toolkit: logging, i18n, profiler, config, cache, event bus, env loader, validate, schedule and utilities",
   "main": "index.js",
   "types": "index.d.ts",
