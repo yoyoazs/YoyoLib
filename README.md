@@ -1,133 +1,249 @@
-[![Stargazers][stars-shield]][stars-url]
-[![Issues][issues-shield]][issues-url]
+# YoyoLib v5.0.0
 
-# YoyoLib
+A lightweight, **zero-dependency** Node.js toolkit for production-grade applications. Built for performance and reliability without the bloat of external `node_modules`.
 
-**YoyoLib** is a lightweight library designed for handling logging and multi-language support in your Node.js applications.
+---
 
-## Features
+## Navigation
+- [Core Utilities](#core-utilities) (Logger, Lang, Config, Cache, EventBus, Env)
+- [Security & Privacy](#security--privacy) (JWT, AES, DataMasker, RateLimiter)
+- [Network & Resilience](#network--resilience) (HTTP Client, Circuit Breaker, API Utils)
+- [Monitoring & Lifecycle](#monitoring--lifecycle) (Health, Shutdown, ErrorReporter, Profiler)
+- [Advanced Data & Tasks](#advanced-data--tasks) (Flatten, Path, Validator, JobQueue, Scheduler)
+- [Aesthetics & Helpers](#aesthetics--helpers) (AnsiColors, stringUtils, objectUtils, retry)
 
-- **Logging:** Create log messages with customizable formatting and the ability to write logs to files using the `Logger` class.
+---
 
-- **Multi-language Support:** Easily manage multi-language support for your application with the `LangManager` class.
+## Core Utilities
 
-## Installation
-
-```bash
-npm install yoyolib
-```
-
-# Example usage
-
-## Logger
-```js
-// Import the yoyolib
+### Logger V3
+Leveled console/file logging with child loggers, JSON output, and automatic rotation.
+```javascript
 const { createLogger } = require('yoyolib');
+const logger = createLogger(false, true, { level: 'info', maxSize: 10 }); // rotate at 10MB
 
-// Create a logger instance
-const logger = createLogger();
-
-// Print a log on the console
-logger.log("test log");
-
-// Print an info on the console
-logger.info("test info");
-
-// Print a warn on the console
-logger.warn("test warn");
-
-// Print an error on the console
-logger.error("test error");
-
-// Print a log with additional options
-logger.log({ content: "test log", name: "TEST" });
-
-// Print a log with options to control console and log writing
-logger.log({ content: "test log", console: false, log: false });
+logger.info('Server started');
+const authLogger = logger.child({ module: 'auth' });
+authLogger.warn('Invalid login'); 
 ```
 
-## LangManager
-
-### json file
-
-```json
-
-// "en_EN"
-{
-    "message": {
-        "test": "this is a test.",
-        "testVariables": "Hello {user} !"
-    }
-}
-
-// "fr_FR"
-{
-    "message": {
-        "test": "ceci est un test.",
-        "testVariables": "Bonjour {user} !"
-    }
-}
-
-```
-Create a folder named 'lang' and place your language files ('fr_FR.json' and 'en_EN.json') inside.
-
-### js
-
-```js
-// Import the yoyolib
+### LangManager
+JSON-based i18n support with fallback, pluralization, and dot-notation keys.
+```javascript
 const { createLangManager } = require('yoyolib');
-
-// Create a multi-language support handler
-const langManager = createLangManager();
-let message;
-
-// Add a language
-langManager.add('en', 'en_EN');
-langManager.add('fr', 'fr_FR');
-
-// Set the active language
-langManager.set('en');
-
-// Use a multi-language system
-message = langManager.use('message.test');
-console.log(message); // Output: this is a test.
-message = langManager.use('message.testVaraibles', {user: "yoyoazs"});
-console.log(message); // Output: Hello yoyoazs !
-
-// Set the active language
-langManager.set('fr');
-
-// Use a multi-language system
-message = langManager.use('message.test');
-console.log(message); // Output: ceci est un test.
-message = langManager.use('message.testVaraibles', {user: "yoyoazs"});
-console.log(message); // Output: Bonjour yoyoazs !
+const lang = createLangManager(); // scan ./langs/*.json
+lang.set('fr');
+lang.use('welcome.message', { user: 'Alice' });
 ```
 
-## API
+### ConfigManager
+Key/Value configuration store with deep-path support (get/set) and file persistence.
+```javascript
+const { createConfigManager } = require('yoyolib');
+const config = createConfigManager('settings.json', { debug: false });
+config.set('database.port', 5432); // auto-saves
+```
 
-### `createLogger(logday = false, date = false, args = undefined): Logger`
+### EnvLoader
+Typed environment variables loader (.env + process.env).
+```javascript
+const { createEnvLoader } = require('yoyolib');
+const env = createEnvLoader();
+const port = env.getNumber('PORT', 3000);
+const debug = env.getBool('DEBUG', false);
+```
 
-Creates a Logger instance with optional configurations.
+---
 
-- **logday** (boolean): If true, creates a log file for the day.
-- **date** (boolean): If true, logs both date and hours; otherwise, only logs hours.
-- **args** (object): Additional configuration options for the Logger.
+## Security & Privacy
 
-Returns a Logger instance.
+### Security (JWT & AES-256-GCM)
+Native cryptographic utilities using authenticated encryption.
+```javascript
+const { jwtUtils, cryptoUtils } = require('yoyolib');
 
-### `createLangManager(): LangManager`
+// JWT (Native crypto implementation)
+const token = jwtUtils.sign({ id: 42 }, 'secret', { expiresIn: '1h' });
+const decoded = jwtUtils.verify(token, 'secret');
 
-Creates a new instance of a multi-language support handler.
+// AES-256-GCM (Authenticated Encryption)
+const { encrypted, iv, tag } = cryptoUtils.encrypt('sensitive-data', '32-byte-key-placeholder-here-!!!');
+const plain = cryptoUtils.decrypt(encrypted, '32-byte-key-placeholder-here-!!!', iv, tag);
+```
 
-Returns a LangManager instance.
+### DataMasker (GDPR)
+Recursive object masker with circular reference protection and Whitelist/Blacklist modes.
+```javascript
+const { createDataMasker } = require('yoyolib');
+const masker = createDataMasker({
+    fields: ['password', 'token'],
+    customMaskers: {
+        email: (val) => `${val[0]}***@${val.split('@')[1]}`
+    }
+});
+const masked = masker.mask({ email: 'user@test.com', password: '123' });
+```
+
+### RateLimiter
+Window-based throttling for API protection.
+```javascript
+const { createRateLimiter } = require('yoyolib');
+const limiter = createRateLimiter({ limit: 100, window: 60 }); // 100 req/min
+
+const status = limiter.consume('user-ip-address');
+if (!status.allowed) console.log(`Retry in ${status.resetIn}ms`);
+```
+
+---
+
+## Network & Resilience
+
+### Structured HTTP Client
+Wrapper over native `fetch` with structured JSON handling, timeouts, and bearer auth.
+```javascript
+const { httpClient } = require('yoyolib');
+const data = await httpClient.get('https://api.com/data', { 
+    timeout: 3000, 
+    attempts: 3 
+});
+```
+
+### Circuit Breaker
+Protects services from cascading failures by monitoring error rates.
+```javascript
+const { CircuitBreaker } = require('yoyolib');
+const breaker = new CircuitBreaker(myNetworkFn, { failureThreshold: 3 });
+const result = await breaker.fire('param');
+```
+
+### API Utils (Pagination)
+Standard envelope for paginated API responses.
+```javascript
+const { apiUtils } = require('yoyolib');
+const response = apiUtils.paginate(items, totalCount, page, limit);
+// Returns: { data: [...], metadata: { totalPages, currentPage, hasNext, ... } }
+```
+
+---
+
+## Monitoring & Lifecycle
+
+### HealthChecker
+Aggregated status reporting for internal and external services.
+```javascript
+const { createHealthChecker } = require('yoyolib');
+const health = createHealthChecker();
+health.register('db', async () => true);
+const report = await health.getStatus(); // { status: "UP", services: { ... } }
+```
+
+### ErrorReporter (Webhooks)
+Automated crash notifications to Discord, Slack, or any custom webhook.
+```javascript
+const { createErrorReporter } = require('yoyolib');
+const reporter = createErrorReporter('https://webhook.url');
+
+reporter.initGlobalHandler(); // Catch all uncaught exceptions
+reporter.report(new Error('Manual report'), { severity: 'high' });
+```
+
+### Profiler
+Real-time system unit monitoring (CPU/RAM/Uptime) in the console.
+```javascript
+const { createProfiler } = require('yoyolib');
+const profiler = createProfiler();
+profiler.enableProfiler(); // Stats display every 2s
+```
+
+### ContextTracker (AsyncLocalStorage)
+Propagate request context across the entire async call stack.
+```javascript
+const { createContextTracker } = require('yoyolib');
+const tracker = createContextTracker();
+tracker.run({ reqId: 'uuid' }, () => {
+    const { reqId } = tracker.get();
+});
+```
+
+---
+
+## Advanced Data & Tasks
+
+### Validator
+Schema-based object validation with built-in rules.
+```javascript
+const { validate } = require('yoyolib');
+const schema = {
+    username: { type: 'string', required: true, min: 3 },
+    age: { type: 'number', min: 18 }
+};
+validate({ username: 'admin', age: 25 }, schema); // throws ValidationError if fails
+```
+
+### JobQueue
+Async task queue with concurrency control.
+```javascript
+const { JobQueue } = require('yoyolib');
+const queue = new JobQueue({ concurrency: 2 });
+queue.push(async () => { ... });
+```
+
+### Scheduler
+Recurring task management.
+```javascript
+const { createScheduler } = require('yoyolib');
+const scheduler = createScheduler();
+scheduler.every('cleanup', 3600, () => runCleanup()); // every hour
+```
+
+### Data Manipulation (Flatten & Path)
+```javascript
+const { ObjectFlatten, objectPath } = require('yoyolib');
+
+// Flatten/Unflatten
+const flat = ObjectFlatten.flatten({ a: { b: 1 } }); // { "a.b": 1 }
+// Deep access
+objectPath.get({ user: { id: 1 } }, 'user.id'); // 1
+```
+
+---
+
+## Aesthetics & Helpers
+
+### AnsiColors
+Zero-dependency terminal styling.
+```javascript
+const { ansiColors } = require('yoyolib');
+console.log(ansiColors.bold(ansiColors.red('Critical Error!')));
+```
+
+### objectUtils
+Deep merge, clone, and object filtering.
+```javascript
+const { objectUtils } = require('yoyolib');
+
+const merged = objectUtils.deepMerge({ a: 1 }, { b: 2 });
+const picked = objectUtils.pick({ a: 1, b: 2 }, ['a']); // { a: 1 }
+const stripped = objectUtils.omit({ a: 1, b: 2 }, ['b']); // { a: 1 }
+```
+
+### stringUtils
+```javascript
+const { stringUtils } = require('yoyolib');
+stringUtils.slugify('Hello World!'); // "hello-world"
+stringUtils.camelCase('hello_world'); // "helloWorld"
+```
+
+---
+
+## Stability & Requirements
+
+- **Registry**: 0 external dependencies.
+- **Node.js**: Requires version 18.0.0 or higher.
+- **TypeScript**: Included `index.d.ts` for full intellisense.
+- **CI/CD**: Fully tested suite (70+ unit tests) on Node 18, 20, 22.
+
+---
 
 ## License
-This project is licensed under the [YoyoLib Custom License](LICENSE) - see the LICENSE file for details.
-
-For more information, please refer to our [wiki](https://github.com/yoyoazs/YoyoLib/wiki)
-
-[stars-shield]: https://img.shields.io/github/stars/yoyoazs/YoyoLib.svg?style=for-the-badge
-[stars-url]: https://github.com/yoyoazs/YoyoLib/stargazers
-[issues-shield]: https://img.shields.io/github/issues/yoyoazs/YoyoLib.svg?style=for-the-badge
-[issues-url]: https://github.com/yoyoazs/YoyoLib/issues
+[YoyoLib Custom License](LICENSE)

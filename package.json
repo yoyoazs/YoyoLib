@@ -1,13 +1,23 @@
 {
   "name": "yoyolib",
-  "version": "2.4.2",
-  "description": "A sample package for logger",
+  "version": "5.0.0",
+  "description": "A lightweight Node.js toolkit: logging, i18n, profiler, config, cache, event bus, env loader, validate, schedule and utilities",
   "main": "index.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "require": "./index.js",
+      "import": "./index.js"
+    }
+  },
   "directories": {
     "lib": "lib"
   },
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
-    "test": "node index.js",
+    "test": "node --test",
     "release": "release-it"
   },
   "repository": {
@@ -15,10 +25,12 @@
     "url": "git+https://github.com/yoyoazs/YoyoLib.git"
   },
   "keywords": [
-    "logger",
-    "js",
-    "javascript",
-    "multilang"
+    "logger", "js", "javascript", "multilang", "i18n",
+    "profiler", "config", "cache", "event-bus", "env",
+    "retry", "throttle", "debounce", "validator", "scheduler",
+    "saas", "crypto", "uuid", "rate-limiter", "jwt",
+    "http", "fetch", "circuit-breaker", "job-queue", "utils",
+    "deep-merge", "pagination"
   ],
   "author": "yoyoazs",
   "license": "YoyoLib Custom License",
@@ -26,8 +38,5 @@
     "url": "https://github.com/yoyoazs/YoyoLib/issues"
   },
   "homepage": "https://github.com/yoyoazs/YoyoLib#readme",
-  "dependencies": {
-    "fs": "^0.0.1-security",
-    "path": "^0.12.7"
-  }
+  "dependencies": {}
 }
