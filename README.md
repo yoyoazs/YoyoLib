@@ -236,6 +236,16 @@ stringUtils.camelCase('hello_world'); // "helloWorld"
 
 ---
 
+## Security & Permissions
+
+This library requires **Network Access** for the following legitimate purposes:
+- **`httpClient`**: Making outgoing requests to external APIs.
+- **`ErrorReporter`**: Sending automated error notifications to your configured webhooks (Discord/Slack).
+
+No data is sent anywhere else, and we collect zero analytics.
+
+---
+
 ## Stability & Requirements
 
 - **Registry**: 0 external dependencies.
