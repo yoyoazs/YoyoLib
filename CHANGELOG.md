@@ -12,6 +12,15 @@ All notable changes to this project will be documented in this file.
 - **Logger**: `Error` objects are logged with their stack (and a `stack` field in JSON mode); plain objects are inspected instead of printing `[object Object]`. `child()` accepts `{ module: 'auth' }`, inherits the current level and shares the parent's file stream. Rotation no longer calls `statSync` on every line.
 - **README**: fixed wrong examples (JWT, cryptoUtils, httpClient `attempts`, logger child).
 
+### Changed
+- **LangManager** rewritten for bots and multi-tenant apps (legacy `add` / `set` / `use` API kept):
+  - translations are loaded once in memory instead of being read from disk on every `use()`; `reload()` now actually re-reads files;
+  - per-call locale with `t(locale, key, vars)` and `for(locale)`, resolving `en-US` / `fr_CA` to base languages;
+  - pluralization via `Intl.PluralRules` (`one` / `other` / ..., optional `zero`) driven by `vars.count`;
+  - `all(key)` for Discord `name_localizations`, `addResource()`, `has()`, `locales()`;
+  - options `dir`, `autoLoad`, `fallback`, `defaultLocale`, `onMissing`;
+  - the first registered language becomes active; the constructor only requires the directory when `autoLoad` is set.
+
 ### Added
 - `parseDuration('1h30m')` and `formatDuration(ms)` utilities.
 

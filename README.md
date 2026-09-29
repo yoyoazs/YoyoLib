@@ -30,13 +30,26 @@ authLogger.warn('Invalid login');
 ```
 
 ### LangManager
-JSON-based i18n support with fallback, pluralization, and dot-notation keys.
+JSON-based i18n with per-call locales, fallback, pluralization and dot-notation keys.
+Translations are loaded once in memory, so each user / guild / tenant can have its own language.
 ```javascript
 const { createLangManager } = require('yoyolib');
-const lang = createLangManager(); // scan ./langs/*.json
-lang.set('fr');
-lang.use('welcome.message', { user: 'Alice' });
+const lang = createLangManager({ autoLoad: true, fallback: 'en' }); // loads ./langs/*.json
+
+// langs/fr.json: { "welcome": "Bienvenue {user} !", "items": { "one": "{count} objet", "other": "{count} objets" } }
+lang.t('fr', 'welcome', { user: 'Alice' });  // "Bienvenue Alice !"
+lang.t('fr', 'items', { count: 3 });         // "3 objets" (Intl.PluralRules, optional "zero" form)
+lang.t('en-US', 'welcome', { user: 'Bob' }); // 'en-US' resolves to 'en'; unknown locales use the fallback
+
+// Discord bot: one translator per interaction
+const t = lang.for(interaction.locale);
+await interaction.reply(t('welcome', { user: interaction.user.username }));
+
+// Slash command localizations (name your files with Discord locale codes: fr.json, en-US.json...)
+const description_localizations = lang.all('commands.ping.description');
 ```
+Other options: `dir` (default `'langs'`), `onMissing: 'throw' | 'key' | fn`, `addResource(lang, object)` for in-memory
+translations, `reload()` to re-read files. The legacy `add()` / `set()` / `use()` API still works.
 
 ### ConfigManager
 Key/Value configuration store with deep-path support (get/set) and file persistence.

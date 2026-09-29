@@ -76,15 +76,55 @@ export declare class Logger {
 
 // ─── LangManager ─────────────────────────────────────────────────────────────
 
+export type TranslationVars = Record<string, string | number>;
+
+export interface LangManagerOptions {
+    /** Directory holding the JSON files, relative to cwd. Default: 'langs'. */
+    dir?: string;
+    /** Register every `<name>.json` of `dir` as language `<name>`. Default: false. */
+    autoLoad?: boolean;
+    /** Language used when a key is missing. */
+    fallback?: string;
+    /** Active language for `use()`. Default: the first language added. */
+    defaultLocale?: string;
+    /** Missing key strategy. Default: 'throw'. */
+    onMissing?: 'throw' | 'key' | ((key: string, locale: string) => string);
+}
+
+export interface BoundTranslator {
+    (key: string, vars?: TranslationVars): string;
+    /** The registered language this translator resolved to (or null). */
+    readonly locale: string | null;
+    has(key: string): boolean;
+}
+
 export declare class LangManager {
-    constructor();
+    constructor(options?: LangManagerOptions);
     add(lang: string, langFile: string): string;
+    /** Registers (or merges into) a language from an in-memory object. */
+    addResource(lang: string, translations: Record<string, any>): this;
     show(): string[];
+    locales(): string[];
     set(lang: string): void;
     getActive(): string | null;
     setFallback(lang: string): void;
+    /** Re-reads file-backed languages from disk. */
     reload(): string;
-    use(message: string, args?: Record<string, string | number>): string;
+    /** Maps 'en-US' / 'fr_CA' / 'EN' to a registered language, or null. */
+    resolveLocale(locale: string): string | null;
+    /** Translates a key for a given locale, with fallback, interpolation and pluralization (vars.count). */
+    t(locale: string | null | undefined, key: string, vars?: TranslationVars): string;
+    /** Returns a translator bound to one locale. */
+    for(locale: string | null | undefined): BoundTranslator;
+    /** Translates with the active language. */
+    use(message: string, args?: TranslationVars): string;
+    has(key: string, locale?: string): boolean;
+    /** Translation of a key in every registered language (e.g. Discord name_localizations). */
+    all(key: string, vars?: TranslationVars): Record<string, string>;
+    /** @deprecated Use locales(). */
+    readonly language: string[];
+    /** @deprecated */
+    readonly languageFile: (string | null)[];
 }
 
 // ─── Profiler ────────────────────────────────────────────────────────────────
@@ -209,7 +249,7 @@ export declare function debounce<T extends (...args: any[]) => any>(fn: T, ms: n
 // ─── Factory functions ────────────────────────────────────────────────────────
 
 export declare function createLogger(logday?: boolean, date?: boolean, args?: LoggerOptions): Logger;
-export declare function createLangManager(): LangManager;
+export declare function createLangManager(options?: LangManagerOptions): LangManager;
 export declare function createProfiler(): Profiler;
 export declare function createConfigManager(filePath: string, defaults?: Record<string, any>): ConfigManager;
 export declare function createEventBus(): EventBus;
