@@ -2,6 +2,55 @@
 
 All notable changes to this project will be documented in this file.
 
+## [6.0.0] - 2026-09-29
+
+### Fixed
+- **JWT (security)**: `sign()` now accepts `'1h'` / `{ expiresIn: '1h' }` as documented. Previously these produced a string `exp` claim that `verify()` never treated as expired. `verify()` now rejects non-numeric `exp` claims and non-HS256 headers.
+- **ErrorReporter**: Discord webhooks now receive an embed payload (they rejected the previous body with HTTP 400). Slack webhooks receive a `text` payload. New `format` option (`'auto'`, `'discord'`, `'slack'`, `'raw'` or a function).
+- **httpClient**: `retries` only retries transient failures (network errors, timeouts, 408, 429, 5xx) and honors `Retry-After` (capped by `maxRetryAfter`). `HttpError` is exposed as `httpClient.HttpError` and carries `retryAfter`.
+- **Scheduler**: task errors (sync or async) go to an `onError` handler instead of crashing the process; a run is skipped while the previous one is still pending. New `{ immediate: true }` option.
+- **Logger**: `Error` objects are logged with their stack (and a `stack` field in JSON mode); plain objects are inspected instead of printing `[object Object]`. `child()` accepts `{ module: 'auth' }`, inherits the current level and shares the parent's file stream. Rotation no longer calls `statSync` on every line.
+- **ESM**: named imports (`import { httpClient } from 'yoyolib'`) failed for most exports because Node could not detect them in the CommonJS entry. Explicit `index.mjs` / `yoyolib/testing` ESM entry points fix it.
+- **npm package**: only the library files are published (`files` whitelist): no tests, CI config or local files.
+- **objectPath (security)**: `set()` / `get()` / `has()` refuse `__proto__`, `constructor` and `prototype` segments (prototype pollution) and only follow own properties.
+- **README**: fixed wrong examples (JWT, cryptoUtils, httpClient `attempts`, logger child).
+
+### Changed
+- **LangManager** rewritten for bots and multi-tenant apps (legacy `add` / `set` / `use` API kept):
+  - translations are loaded once in memory instead of being read from disk on every `use()`; `reload()` now actually re-reads files;
+  - per-call locale with `t(locale, key, vars)` and `for(locale)`, resolving `en-US` / `fr_CA` to base languages;
+  - pluralization via `Intl.PluralRules` (`one` / `other` / ..., optional `zero`) driven by `vars.count`;
+  - `all(key)` for Discord `name_localizations`, `addResource()`, `has()`, `locales()`;
+  - options `dir`, `autoLoad`, `fallback`, `defaultLocale`, `onMissing`;
+  - the first registered language becomes active; the constructor only requires the directory when `autoLoad` is set;
+  - `fallback` / `defaultLocale` options may name languages registered later (e.g. with `addResource()`).
+
+### Removed
+- `lib/multiLang/multiLang.js`: unused duplicate of LangManager (it was never exported).
+
+### Added
+- **CommandRegistry** (Discord bots): one router for slash commands (with subcommands and groups), user/message context menus, autocomplete, buttons, select menus, modals, prefix commands and gateway events. customId patterns (`ticket:close:{id}`) and RegExp, cooldowns (user/member/guild/channel/global scopes), `guildOnly` / `ownerOnly` / `check()`, middlewares, error handling with ephemeral replies, `ctx.t` from LangManager, `loadDir()` with type inference from folder names, `toJSON()` / `deploy()` to register commands through the Discord API. Works with discord.js v14+ objects and raw API payloads, without dependencies.
+  - `autoDefer`: defers interactions not answered after 2 s (Discord's limit is 3 s) and reroutes `reply()` / `update()` so handlers need no change.
+  - `botPermissions` / `userPermissions` checks with readable messages; permission names validated at registration; `defaultMemberPermissions` accepts names.
+  - `deploy({ onlyIfChanged: true })` skips unchanged commands (hash kept in `.yoyolib/commands-hash.json`); `commandsHash()`.
+- **Typed prefix arguments**: `args: [{ name, type, required, default, min, max, choices, regex }]` with types `string`, `number`, `integer`, `boolean`, `user`, `member`, `channel`, `role`, `snowflake`, `duration`, `rest`; skipping of non-matching optional arguments, automatic usage replies (`messages.usage`), `argResolvers`, `ArgumentError`. Parsing happens before the cooldown.
+- **JobScheduler**: persistent one-off jobs (`define`, `scheduleAt`, `scheduleIn`, `cancel`, `list`), overdue jobs run at start-up, retries with exponential backoff, atomic locks for several processes, jobs rescheduled while running are kept.
+- **Stores**: `entries(prefix)` on MemoryStore, JsonFileStore and RedisStore (MGET in batches).
+- **CommandRegistry `paginate()` / `confirm()`**: button menus restricted to the author, inactivity timeout that disables the buttons, works from slash (reply / deferred / replied) and prefix commands; `messages.sessionExpired` and `messages.notYourSession`.
+- **`yoyolib/testing`**: `mockInteraction`, `mockMessage`, `mockClient` to unit-test bots without Discord, following the API's acknowledgement rules.
+- **package.json**: `types` condition in `exports`, `./testing` and `./package.json` subpaths.
+- **discordFormat**: `timestamp`, mentions, `escapeMarkdown`, `codeBlock`, `inlineCode`, `truncate`, `splitMessage` and `LIMITS`.
+- **GuildSettings**: per-guild settings with defaults (only overrides are stored), schema validation (`type` incl. `snowflake`, `min`/`max`, `regex`, `choices`, `nullable`, custom `validate`), local cache with deduplicated reads, `reset()`, `for(guildId)`, and `ctx.settings` in CommandRegistry.
+- **JsonFileStore**: MemoryStore persisted to a JSON file with batched, atomic writes.
+- **discordPermissions**: permission flags, `resolvePermissions`, `missingPermissions`, `formatPermission`, `toBitfield`.
+- **CooldownManager**: per-key cooldowns with several uses per window, `check()` without consuming, `reset()`, automatic cleanup.
+- **Stores**: `MemoryStore` and `RedisStore` (bring your own ioredis or node-redis v4+ client) behind a small async `Store` interface. `RateLimiter`, `CooldownManager` and `CommandRegistry` accept `store` to share limits and cooldowns between processes or shards; their methods then return Promises.
+- **RateLimiter**: `middleware()` for Express / Connect / node:http (RateLimit-* headers, 429 + Retry-After), `reset(key)`, `name` option.
+- **webhookUtils**: `verifyStripe`, `verifyGithub`, `verifyDiscord` (Ed25519, HTTP interactions), `verifyHmac`, `signTimestamped` / `verifyTimestamped` for your own outgoing webhooks.
+- **passwordUtils**: scrypt `hash` / `verify` / `needsRehash` with self-describing hashes.
+- **cryptoUtils**: `generateApiKey`, `hashApiKey`, `safeEqual`.
+- `parseDuration('1h30m')` and `formatDuration(ms)` utilities.
+
 ## [5.0.0] - Upcoming
 
 ### Added (Major Refactoring & New Features - "God Mode")

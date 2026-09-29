@@ -18,6 +18,15 @@ test('objectPath - set with dot notation', (t) => {
     assert.strictEqual(typeof data.user.profile, 'object');
 });
 
+test('objectPath - refuses prototype pollution paths', () => {
+    const data = {};
+    assert.strictEqual(objectPath.set(data, '__proto__.polluted', true), false);
+    assert.strictEqual(objectPath.set(data, 'a.constructor.prototype.polluted', true), false);
+    assert.strictEqual({}.polluted, undefined);
+    assert.strictEqual(objectPath.get({}, 'constructor'), undefined);
+    assert.strictEqual(objectPath.has({}, 'toString'), false); // inherited keys are not "own" paths
+});
+
 test('objectPath - has check', (t) => {
     const data = { a: { b: 0 } };
     assert.strictEqual(objectPath.has(data, 'a.b'), true);

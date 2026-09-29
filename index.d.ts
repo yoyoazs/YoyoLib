@@ -32,7 +32,7 @@ export interface LoggerOptions {
 }
 
 export interface LogArgs {
-    content:   string;
+    content:   unknown;
     name?:     string;
     /** If false, skips console output. Default: true. */
     console?:  boolean;
@@ -43,11 +43,11 @@ export interface LogArgs {
 export declare class Logger {
     constructor(file: string, logDateAndHours: boolean, args?: LoggerOptions);
 
-    debug(args: string | LogArgs): void;
-    log(args:   string | LogArgs): void;
-    info(args:  string | LogArgs): void;
-    warn(args:  string | LogArgs): void;
-    error(args: string | LogArgs): void;
+    debug(args: string | Error | LogArgs | Record<string, unknown>): void;
+    log(args:   string | Error | LogArgs | Record<string, unknown>): void;
+    info(args:  string | Error | LogArgs | Record<string, unknown>): void;
+    warn(args:  string | Error | LogArgs | Record<string, unknown>): void;
+    error(args: string | Error | LogArgs | Record<string, unknown>): void;
 
     dir(message: any): void;
     table(table: any[]): void;
@@ -68,23 +68,63 @@ export declare class Logger {
     setColor(type: LogColorType, color: StyleKey): void;
     getColor(type: LogColorType): StyleKey;
 
-    /** Returns a new Logger instance, inheriting options but with a fixed name prefix */
-    child(name: string): Logger;
+    /** Returns a child Logger sharing the parent's stream, with a fixed name prefix. */
+    child(name: string | { name?: string; module?: string; [key: string]: unknown }): Logger;
 
     close(): void;
 }
 
 // ─── LangManager ─────────────────────────────────────────────────────────────
 
+export type TranslationVars = Record<string, string | number>;
+
+export interface LangManagerOptions {
+    /** Directory holding the JSON files, relative to cwd. Default: 'langs'. */
+    dir?: string;
+    /** Register every `<name>.json` of `dir` as language `<name>`. Default: false. */
+    autoLoad?: boolean;
+    /** Language used when a key is missing. */
+    fallback?: string;
+    /** Active language for `use()`. Default: the first language added. */
+    defaultLocale?: string;
+    /** Missing key strategy. Default: 'throw'. */
+    onMissing?: 'throw' | 'key' | ((key: string, locale: string) => string);
+}
+
+export interface BoundTranslator {
+    (key: string, vars?: TranslationVars): string;
+    /** The registered language this translator resolved to (or null). */
+    readonly locale: string | null;
+    has(key: string): boolean;
+}
+
 export declare class LangManager {
-    constructor();
+    constructor(options?: LangManagerOptions);
     add(lang: string, langFile: string): string;
+    /** Registers (or merges into) a language from an in-memory object. */
+    addResource(lang: string, translations: Record<string, any>): this;
     show(): string[];
+    locales(): string[];
     set(lang: string): void;
     getActive(): string | null;
     setFallback(lang: string): void;
+    /** Re-reads file-backed languages from disk. */
     reload(): string;
-    use(message: string, args?: Record<string, string | number>): string;
+    /** Maps 'en-US' / 'fr_CA' / 'EN' to a registered language, or null. */
+    resolveLocale(locale: string): string | null;
+    /** Translates a key for a given locale, with fallback, interpolation and pluralization (vars.count). */
+    t(locale: string | null | undefined, key: string, vars?: TranslationVars): string;
+    /** Returns a translator bound to one locale. */
+    for(locale: string | null | undefined): BoundTranslator;
+    /** Translates with the active language. */
+    use(message: string, args?: TranslationVars): string;
+    has(key: string, locale?: string): boolean;
+    /** Translation of a key in every registered language (e.g. Discord name_localizations). */
+    all(key: string, vars?: TranslationVars): Record<string, string>;
+    /** @deprecated Use locales(). */
+    readonly language: string[];
+    /** @deprecated */
+    readonly languageFile: (string | null)[];
 }
 
 // ─── Profiler ────────────────────────────────────────────────────────────────
@@ -209,7 +249,7 @@ export declare function debounce<T extends (...args: any[]) => any>(fn: T, ms: n
 // ─── Factory functions ────────────────────────────────────────────────────────
 
 export declare function createLogger(logday?: boolean, date?: boolean, args?: LoggerOptions): Logger;
-export declare function createLangManager(): LangManager;
+export declare function createLangManager(options?: LangManagerOptions): LangManager;
 export declare function createProfiler(): Profiler;
 export declare function createConfigManager(filePath: string, defaults?: Record<string, any>): ConfigManager;
 export declare function createEventBus(): EventBus;
@@ -219,15 +259,80 @@ export declare function createEnvLoader(filePath?: string): EnvLoader;
 
 // ─── Scheduler ────────────────────────────────────────────────────────────────
 
+export interface SchedulerOptions {
+    /** Called when a task throws or rejects. Default: console.error. */
+    onError?: (error: Error, taskName: string) => void;
+}
+
 export declare class Scheduler {
-    constructor();
-    every(name: string, seconds: number, callback: (...args: any[]) => any): this;
+    constructor(options?: SchedulerOptions);
+    every(name: string, seconds: number, callback: () => any, options?: { immediate?: boolean }): this;
     stop(name: string): boolean;
     list(): string[];
     clear(): this;
 }
 
-export declare function createScheduler(): Scheduler;
+export declare function createScheduler(options?: SchedulerOptions): Scheduler;
+
+// ─── JobScheduler ─────────────────────────────────────────────────────────────
+
+export interface Job<P = any> {
+    id: string;
+    name: string;
+    /** Epoch ms. */
+    runAt: number;
+    payload: P;
+    attempts: number;
+    maxAttempts: number;
+    createdAt: number;
+    lastError?: string;
+}
+
+export interface JobSchedulerOptions {
+    /** Must implement entries(). Default: MemoryStore (jobs lost on restart: use JsonFileStore or RedisStore). */
+    store?: Store & { entries(prefix: string): Promise<Array<[string, any]>> };
+    /** Default: '5s'. */
+    pollInterval?: string | number;
+    /** Default: 3. */
+    maxAttempts?: number;
+    /** First retry delay, doubled at each attempt. Default: '30s'. */
+    retryDelay?: string | number;
+    /** Max run time before another process may retry the job. Default: '5m'. */
+    lockTtl?: string | number;
+    /** Default: 5. */
+    concurrency?: number;
+    /** Default: 'jobs'. */
+    namespace?: string;
+    onError?: (error: Error, job: Job, final: boolean) => void;
+}
+
+/** Persistent one-off jobs, at-least-once, safe with several processes on a shared store. */
+export declare class JobScheduler {
+    constructor(options?: JobSchedulerOptions);
+    define<P = any>(name: string, handler: (payload: P, job: Job<P>) => any): this;
+    /** `id` makes the job unique: scheduling again with the same id replaces it. */
+    scheduleAt<P = any>(name: string, date: Date | number, payload?: P, options?: { id?: string; maxAttempts?: number }): Promise<Job<P>>;
+    scheduleIn<P = any>(name: string, delay: string | number, payload?: P, options?: { id?: string; maxAttempts?: number }): Promise<Job<P>>;
+    cancel(id: string): Promise<boolean>;
+    get(id: string): Promise<Job | null>;
+    /** Pending jobs, soonest first. */
+    list(name?: string): Promise<Job[]>;
+    /** Starts polling; overdue jobs run right away. */
+    start(): this;
+    /** Stops polling and waits for running jobs. */
+    stop(): Promise<void>;
+    /** Runs due jobs once. */
+    tick(): Promise<void>;
+}
+
+export declare function createJobScheduler(options?: JobSchedulerOptions): JobScheduler;
+
+// ─── Duration ─────────────────────────────────────────────────────────────────
+
+/** Parses "1h30m", "10s", "2 days"... into milliseconds. Plain numbers are milliseconds. */
+export declare function parseDuration(input: string | number): number;
+/** Formats milliseconds as "1h 30m" (or "1 hour 30 minutes" with long: true). */
+export declare function formatDuration(ms: number, options?: { long?: boolean; maxUnits?: number }): string;
 
 // ─── Validator ────────────────────────────────────────────────────────────────
 
@@ -253,8 +358,12 @@ export declare const stringUtils: {
 // ─── SaaS Modules ─────────────────────────────────────────────────────────────
 
 export interface RateLimiterOptions {
+    /** Max hits per window. Default: 100. */
     limit?: number;
+    /** Window in seconds. Default: 60. */
     window?: number;
+    /** Key namespace inside a shared store. Default: 'default'. */
+    name?: string;
 }
 
 export interface RateLimitStatus {
@@ -268,8 +377,12 @@ export declare class RateLimiter {
     constructor(options?: RateLimiterOptions);
     limit: number;
     window: number;
+    name: string;
     consume(key: string): RateLimitStatus;
+    reset(key: string): boolean;
     resetAll(): void;
+    /** Express / Connect / node:http middleware (RateLimit-* headers, 429 + Retry-After). */
+    middleware(options?: RateLimitMiddlewareOptions): RateLimitMiddleware;
 }
 
 export declare function createRateLimiter(options?: RateLimiterOptions): RateLimiter;
@@ -280,20 +393,48 @@ export declare const cryptoUtils: {
     randomString(length?: number): string;
     encrypt(text: string, secret: string): string;
     decrypt(encryptedData: string, secret: string): string;
+    /** Returns the key to show once, and the hash to store. */
+    generateApiKey(options?: { prefix?: string; bytes?: number }): { key: string; hash: string; last4: string };
+    hashApiKey(key: string): string;
+    safeEqual(a: string, b: string): boolean;
 };
 
 export declare const jwtUtils: {
-    sign(payload: Record<string, any>, secret: string, expiresIn?: number): string;
+    /** expiresIn: seconds, a duration string ('15m', '7d') or { expiresIn }. Default: 24h. */
+    sign(payload: Record<string, any>, secret: string, expiresIn?: number | string | { expiresIn?: number | string }): string;
     verify(token: string, secret: string): Record<string, any>;
     decode(token: string): Record<string, any>;
 };
 
+export interface HttpRequestOptions extends Omit<RequestInit, 'headers'> {
+    headers?: Record<string, string>;
+    query?: Record<string, string | number | boolean>;
+    json?: unknown;
+    /** Extra attempts on network errors, timeouts, 408, 429 and 5xx. 4xx are never retried. Default: 0. */
+    retries?: number;
+    /** Delay in ms between retries when no Retry-After header is sent. Default: 500. */
+    retryDelay?: number;
+    /** Upper bound in ms for honoring Retry-After. Default: 30000. */
+    maxRetryAfter?: number;
+    timeout?: number;
+    bearer?: string;
+}
+
+export declare class HttpError extends Error {
+    status: number;
+    url: string;
+    data: any;
+    /** Parsed Retry-After header in ms, or null. */
+    retryAfter: number | null;
+}
+
 export declare const httpClient: {
-    request(url: string, options?: Record<string, any>): Promise<any>;
-    get(url: string, options?: Record<string, any>): Promise<any>;
-    post(url: string, options?: Record<string, any>): Promise<any>;
-    put(url: string, options?: Record<string, any>): Promise<any>;
-    delete(url: string, options?: Record<string, any>): Promise<any>;
+    HttpError: typeof HttpError;
+    request<T = any>(url: string, options?: HttpRequestOptions): Promise<T>;
+    get<T = any>(url: string, options?: HttpRequestOptions): Promise<T>;
+    post<T = any>(url: string, options?: HttpRequestOptions): Promise<T>;
+    put<T = any>(url: string, options?: HttpRequestOptions): Promise<T>;
+    delete<T = any>(url: string, options?: HttpRequestOptions): Promise<T>;
 };
 
 export declare class CircuitBreaker {
@@ -341,15 +482,30 @@ export declare class ContextTracker {
 
 export declare function createContextTracker(): ContextTracker;
 
+export interface ErrorReport {
+    appName: string;
+    message: string;
+    stack?: string;
+    context: Record<string, any>;
+}
+
+export interface ErrorReporterOptions {
+    appName?: string;
+    contextTracker?: ContextTracker;
+    /** 'auto' (default) detects Discord/Slack from the URL. A function builds a custom body. */
+    format?: 'auto' | 'discord' | 'slack' | 'raw' | ((report: ErrorReport) => unknown);
+}
+
 export declare class ErrorReporter {
-    constructor(webhookUrl: string, options?: { appName?: string, contextTracker?: ContextTracker });
+    constructor(webhookUrl: string, options?: ErrorReporterOptions);
+    buildPayload(report: ErrorReport): unknown;
     report(error: Error | string, extraContext?: Record<string, any>): Promise<void>;
     wrap<T extends (...args: any[]) => Promise<any>>(asyncFn: T): T;
     capture<T extends (...args: any[]) => any>(fn: T, ...args: Parameters<T>): ReturnType<T>;
     initGlobalHandler(): void;
 }
 
-export declare function createErrorReporter(webhookUrl: string, options?: { appName?: string, contextTracker?: ContextTracker }): ErrorReporter;
+export declare function createErrorReporter(webhookUrl: string, options?: ErrorReporterOptions): ErrorReporter;
 
 export declare class ShutdownManager {
     constructor(options?: { timeout?: number, log?: boolean });
@@ -425,6 +581,568 @@ export declare const ObjectFlatten: {
     unflatten(data: Record<string, any>): Record<string, any>;
 };
 
+// ─── Bot: CooldownManager ────────────────────────────────────────────────────
 
+export type CooldownRule = string | number | { duration: string | number; uses?: number };
 
+export interface CooldownResult {
+    /** False when the cooldown is active. */
+    ok: boolean;
+    /** Ms until the cooldown ends (0 when ok). */
+    remaining: number;
+    /** Human form of `remaining`, e.g. "4 seconds". */
+    remainingText: string;
+    /** Epoch ms when the window resets. */
+    resetAt: number;
+    usesLeft: number;
+    limit: number;
+}
 
+export declare class CooldownManager {
+    /** For a store-backed (async) manager, use createCooldownManager({ store }). */
+    constructor(options?: { sweepInterval?: number });
+    /** Consumes one use of `id` in `bucket`. */
+    hit(bucket: string, id: string, rule: CooldownRule): CooldownResult;
+    /** Same as hit() without consuming. */
+    check(bucket: string, id: string, rule: CooldownRule): CooldownResult;
+    /** Resets one id, or the whole bucket. Returns the number of entries removed. */
+    reset(bucket: string, id?: string): number;
+    clear(): void;
+    sweep(): void;
+    destroy(): void;
+}
+
+export declare function createCooldownManager(options?: { sweepInterval?: number }): CooldownManager;
+
+// ─── Bot: CommandRegistry ────────────────────────────────────────────────────
+
+export type HandlerKind = 'slash' | 'userContext' | 'messageContext' | 'button' | 'select' | 'modal' | 'prefix' | 'event';
+
+export type RegistryStatus =
+    | 'ok' | 'stopped' | 'not_found' | 'ignored' | 'cooldown'
+    | 'denied' | 'guild_only' | 'owner_only' | 'error'
+    | 'bot_missing_permissions' | 'user_missing_permissions' | 'invalid_args';
+
+export interface HandlerResult {
+    handled: boolean;
+    status: RegistryStatus;
+    kind?: HandlerKind | 'autocomplete';
+    name?: string;
+    cooldown?: CooldownResult;
+    error?: Error;
+    /** Missing permission names for *_missing_permissions statuses. */
+    missing?: string[];
+}
+
+export interface HandlerContext<T = any> {
+    kind: HandlerKind | 'autocomplete';
+    /** Command name, or the full customId for components. */
+    name: string;
+    def: HandlerDefinition;
+    /** The interaction or message being handled. */
+    target: T;
+    client: any;
+    registry: CommandRegistry;
+    userId: string | null;
+    guildId: string | null;
+    channelId: string | null;
+    /** Values captured from a customId pattern or RegExp named groups. */
+    params: Record<string, string>;
+    /** Raw prefix command words (quotes supported). */
+    args: string[];
+    /** Parsed prefix arguments when the command declares `args`. */
+    options?: Record<string, any>;
+    /** "sub" or "group sub" for slash commands. */
+    subcommand: string | null;
+    /** Prefix and alias used, for prefix commands. */
+    prefix?: string;
+    alias?: string;
+    /** Free space for middlewares. */
+    state: Record<string, any>;
+    /** Ephemeral reply (interaction) or reply (message). */
+    reply(content: string | Record<string, any>): Promise<void>;
+    /** Present when a LangManager is configured. */
+    t?: BoundTranslator;
+    locale?: string | null;
+    /** Set when the registry deferred the interaction automatically. */
+    autoDeferred?: 'reply' | 'update';
+    /** Present when the registry has a `settings` option. */
+    settings?: BoundGuildSettings;
+}
+
+/** Permission names ('BanMembers', 'BAN_MEMBERS'), bits, or an array of them. */
+export type PermissionResolvable = string | bigint | number | Array<string | bigint | number>;
+
+export interface AutoDeferOptions {
+    /** Delay before deferring, in ms. Default: 2000 (Discord's limit is 3000). */
+    after?: number;
+    /** Defer with an ephemeral "is thinking..." message. Default: false. */
+    ephemeral?: boolean;
+    /** Use deferUpdate() instead of deferReply(). Default: true for buttons and selects. */
+    update?: boolean;
+}
+
+export type CooldownScope = 'user' | 'member' | 'guild' | 'channel' | 'global';
+
+export interface HandlerChecks<T = any> {
+    /** '5s', 3000, or { duration, uses, scope }. Default scope: 'user'. Owners bypass it. */
+    cooldown?: string | number | { duration: string | number; uses?: number; scope?: CooldownScope };
+    guildOnly?: boolean;
+    ownerOnly?: boolean;
+    /** Return true to allow, false to deny, or a string to deny with that message. */
+    check?: (target: T, ctx: HandlerContext<T>) => boolean | string | void | Promise<boolean | string | void>;
+    /** Permissions the bot needs in the channel. Checked when the payload carries them. */
+    botPermissions?: PermissionResolvable;
+    /** Permissions the user needs (runtime check, also useful for prefix commands). */
+    userPermissions?: PermissionResolvable;
+    /**
+     * Defers the interaction when the handler has not answered in time. Once deferred,
+     * interaction.reply() / update() keep working (rerouted to editReply / followUp).
+     * Disable it for handlers that open a modal after a slow operation.
+     */
+    autoDefer?: boolean | AutoDeferOptions;
+}
+
+export type SubcommandHandler<T = any> =
+    | ((interaction: T, ctx: HandlerContext<T>) => any)
+    | (HandlerChecks<T> & {
+        execute: (interaction: T, ctx: HandlerContext<T>) => any;
+        autocomplete?: (interaction: T, ctx: HandlerContext<T>) => any;
+    });
+
+export interface CommandDefinitionBase<T = any> extends HandlerChecks<T> {
+    name?: string;
+    /** A builder (anything with toJSON(), e.g. SlashCommandBuilder) or a raw API object. */
+    data?: { toJSON(): any } | Record<string, any>;
+    /** LangManager key prefix: `<i18n>.name` and `<i18n>.description` fill the localizations. */
+    i18n?: string;
+    /** null = everyone, '0' = admins only, otherwise permission names or bits. */
+    defaultMemberPermissions?: PermissionResolvable | null;
+    contexts?: number[];
+    integrationTypes?: number[];
+    nsfw?: boolean;
+}
+
+export interface SlashDefinition<T = any> extends CommandDefinitionBase<T> {
+    type?: 'slash';
+    description?: string;
+    options?: any[];
+    execute?: (interaction: T, ctx: HandlerContext<T>) => any;
+    autocomplete?: (interaction: T, ctx: HandlerContext<T>) => any;
+    /** Keys are "sub" or "group sub". */
+    subcommands?: Record<string, SubcommandHandler<T>>;
+}
+
+export interface ContextMenuDefinition<T = any> extends CommandDefinitionBase<T> {
+    type?: 'userContext' | 'messageContext';
+    execute: (interaction: T, ctx: HandlerContext<T>) => any;
+}
+
+export interface ComponentDefinition<T = any> extends HandlerChecks<T> {
+    type?: 'button' | 'select' | 'modal';
+    /** Exact customId, a pattern like 'ticket:close:{id}', or a RegExp (named groups become params). */
+    id: string | RegExp;
+    execute: (interaction: T, ctx: HandlerContext<T>) => any;
+}
+
+export type ArgumentType =
+    | 'string' | 'number' | 'integer' | 'boolean'
+    | 'user' | 'member' | 'channel' | 'role' | 'snowflake'
+    | 'duration' | 'rest';
+
+export interface ArgumentDefinition {
+    name: string;
+    /** Default: 'string'. Mentions and IDs give the ID (or the resolver's result); durations give ms; 'rest' joins the remaining words. */
+    type?: ArgumentType;
+    /** Default: true, unless a `default` is given. Optional arguments that do not match are skipped. */
+    required?: boolean;
+    default?: any;
+    /** Length (strings), value (numbers) or duration ('1m') bounds. */
+    min?: number | string;
+    max?: number | string;
+    choices?: any[];
+    regex?: RegExp;
+    description?: string;
+}
+
+export declare class ArgumentError extends Error {
+    readonly arg: ArgumentDefinition;
+}
+
+export interface PrefixDefinition<T = any> extends HandlerChecks<T> {
+    type?: 'prefix';
+    name: string;
+    aliases?: string[];
+    description?: string;
+    /** Typed arguments. When set, execute() receives the parsed values instead of raw words. */
+    args?: ArgumentDefinition[];
+    /** `args` is a Record of parsed values when an `args` schema is given, the raw words otherwise. */
+    execute: (message: T, args: any, ctx: HandlerContext<T>) => any;
+}
+
+export interface EventDefinition {
+    type?: 'event';
+    name: string;
+    once?: boolean;
+    /** Receives the event arguments, then the context as last argument. */
+    execute: (...args: any[]) => any;
+}
+
+export type HandlerDefinition = SlashDefinition | ContextMenuDefinition | ComponentDefinition | PrefixDefinition | EventDefinition;
+
+type ReplyContent = string | Record<string, any>;
+
+export interface RegistryMessages {
+    cooldown(ctx: HandlerContext, result: CooldownResult): ReplyContent | Promise<ReplyContent>;
+    guildOnly(ctx: HandlerContext): ReplyContent | Promise<ReplyContent>;
+    ownerOnly(ctx: HandlerContext): ReplyContent | Promise<ReplyContent>;
+    denied(ctx: HandlerContext): ReplyContent | Promise<ReplyContent>;
+    error(ctx: HandlerContext, error: Error): ReplyContent | Promise<ReplyContent>;
+    botPermissions(ctx: HandlerContext, missing: string[]): ReplyContent | Promise<ReplyContent>;
+    userPermissions(ctx: HandlerContext, missing: string[]): ReplyContent | Promise<ReplyContent>;
+    /** Invalid prefix arguments; `usage` looks like "!ban <user> [duration] [reason...]". */
+    usage(ctx: HandlerContext, error: ArgumentError, usage: string): ReplyContent | Promise<ReplyContent>;
+    /** Click on a paginate/confirm button whose session ended (timeout, restart). */
+    sessionExpired(ctx: HandlerContext): ReplyContent | Promise<ReplyContent>;
+    /** Click by someone else than the user the menu belongs to. */
+    notYourSession(ctx: HandlerContext): ReplyContent | Promise<ReplyContent>;
+}
+
+export interface PaginateOptions {
+    /** Who may turn pages (null = anyone). Default: the author. */
+    userId?: string | null;
+    /** Inactivity delay before the buttons are disabled. Default: '2m'. */
+    timeout?: string | number;
+    ephemeral?: boolean;
+    startPage?: number;
+    labels?: { prev?: string; next?: string };
+}
+
+export interface ConfirmOptions {
+    /** Who may answer (null = anyone). Default: the author. */
+    userId?: string | null;
+    /** Default: '30s'. */
+    timeout?: string | number;
+    ephemeral?: boolean;
+    confirmLabel?: string;
+    cancelLabel?: string;
+    /** Red confirm button. Default: false (green). */
+    danger?: boolean;
+}
+
+export interface ConfirmResult {
+    confirmed: boolean;
+    reason: 'confirmed' | 'cancelled' | 'timeout';
+    /** The button click, already acknowledged with update(): use followUp() / editReply(). null on timeout. */
+    interaction: any;
+}
+
+export interface CommandRegistryOptions {
+    /** Prefix(es) for prefix commands, or a function (e.g. per-guild prefix). */
+    prefix?: string | string[] | ((message: any) => string | string[] | Promise<string | string[]>);
+    /** Also accept "@Bot command". Requires attach(). */
+    mentionPrefix?: boolean;
+    /** Owners pass ownerOnly handlers and bypass cooldowns. */
+    ownerIds?: string[];
+    cooldowns?: CooldownManager | AsyncCooldownManager;
+    /** Store for the internally created CooldownManager (e.g. RedisStore to share cooldowns between shards). */
+    store?: Store;
+    lang?: LangManager;
+    /** Locale used for ctx.t. Default: interaction locale, then guild locale. */
+    locale?: (target: any, ctx: HandlerContext) => string | null | Promise<string | null>;
+    messages?: Partial<RegistryMessages>;
+    onError?: (error: Error, ctx: HandlerContext) => any;
+    /** Default autoDefer for every handler (overridable per handler). Default: false. */
+    autoDefer?: boolean | AutoDeferOptions;
+    /** Exposes ctx.settings bound to the current guild. */
+    settings?: GuildSettings<any>;
+    /** Turn parsed IDs of prefix arguments into objects; return null when not found. */
+    argResolvers?: Partial<Record<'user' | 'member' | 'channel' | 'role', (id: string, message: any) => any>>;
+}
+
+export declare class CommandRegistry {
+    constructor(options?: CommandRegistryOptions);
+    readonly cooldowns: CooldownManager | AsyncCooldownManager;
+    client: any;
+
+    register(def: HandlerDefinition | HandlerDefinition[]): this;
+    slash(def: Omit<SlashDefinition, 'type'>): this;
+    userContext(def: Omit<ContextMenuDefinition, 'type'>): this;
+    messageContext(def: Omit<ContextMenuDefinition, 'type'>): this;
+    button(def: Omit<ComponentDefinition, 'type'>): this;
+    select(def: Omit<ComponentDefinition, 'type'>): this;
+    modal(def: Omit<ComponentDefinition, 'type'>): this;
+    prefix(def: Omit<PrefixDefinition, 'type'>): this;
+    event(def: Omit<EventDefinition, 'type'>): this;
+    /** Middleware run before every command/component handler. */
+    use(fn: (ctx: HandlerContext, next: () => Promise<void>) => any): this;
+    /** Recursively loads handler files; type inferred from folder names when missing. */
+    loadDir(dir: string): this;
+
+    get(kind: HandlerKind, name: string): HandlerDefinition | undefined;
+    list(kind: HandlerKind): HandlerDefinition[];
+
+    handleInteraction(interaction: any): Promise<HandlerResult>;
+    handleMessage(message: any): Promise<HandlerResult>;
+    reply(target: any, content: ReplyContent): Promise<void>;
+    /** Sends pages with ◀ ▶ buttons. Reply, editReply or followUp is picked from the interaction state. */
+    paginate(target: any, pages: Array<string | Record<string, any>>, options?: PaginateOptions): Promise<{ id: string | null; stop(): Promise<void> }>;
+    /** Asks a yes/no question with buttons and waits for the answer. */
+    confirm(target: any, content: string | Record<string, any>, options?: ConfirmOptions): Promise<ConfirmResult>;
+    /** Registers events and routes interactionCreate / messageCreate. */
+    attach(client: any): this;
+
+    /** Application command payloads (slash + context menus). */
+    toJSON(): Record<string, any>[];
+    /** Overwrites the application commands (globally or in one guild). */
+    deploy(options: {
+        token: string;
+        applicationId: string;
+        guildId?: string;
+        /** Skip the API call when commands did not change since the last deploy. Default: false. */
+        onlyIfChanged?: boolean;
+        /** Default: '.yoyolib/commands-hash.json'. */
+        cacheFile?: string;
+    }): Promise<any[] | null>;
+    /** Stable sha256 of toJSON(). */
+    commandsHash(): string;
+
+    static buildCustomId(pattern: string, params?: Record<string, string | number>): string;
+}
+
+export declare function createCommandRegistry(options?: CommandRegistryOptions): CommandRegistry;
+
+// ─── Bot: discordFormat ──────────────────────────────────────────────────────
+
+export type TimestampStyle = 't' | 'T' | 'd' | 'D' | 'f' | 'F' | 'R';
+
+export declare const discordFormat: {
+    /** Discord API limits (characters unless stated otherwise). */
+    readonly LIMITS: Readonly<{
+        message: number; embedTitle: number; embedDescription: number; embedFields: number;
+        embedFieldName: number; embedFieldValue: number; embedFooter: number; embedAuthor: number;
+        embedTotal: number; embedsPerMessage: number; customId: number; buttonLabel: number;
+        selectOptions: number; componentsPerRow: number; rowsPerMessage: number; choices: number;
+    }>;
+    /** "<t:unix:style>", shown in each user's timezone. 'R' = relative. Default style: 'f'. */
+    timestamp(date: Date | number | string, style?: TimestampStyle): string;
+    userMention(id: string): string;
+    channelMention(id: string): string;
+    roleMention(id: string): string;
+    /** "</name:id>", clickable slash command. */
+    commandMention(name: string, id: string): string;
+    emoji(name: string, id: string, animated?: boolean): string;
+    hyperlink(text: string, url: string): string;
+    hideLinkEmbed(url: string): string;
+    escapeMarkdown(text: string): string;
+    codeBlock(content: string, language?: string): string;
+    inlineCode(content: string): string;
+    truncate(text: string, max: number, suffix?: string): string;
+    /** Splits at line breaks, then spaces, then anywhere. Default maxLength: 2000. */
+    splitMessage(text: string, options?: { maxLength?: number; separators?: string[]; prepend?: string; append?: string }): string[];
+};
+
+// ─── Bot: GuildSettings ──────────────────────────────────────────────────────
+
+export interface SettingRule {
+    type?: 'string' | 'number' | 'boolean' | 'object' | 'array' | 'snowflake';
+    /** Min length (strings, arrays) or min value (numbers). */
+    min?: number;
+    max?: number;
+    regex?: RegExp;
+    choices?: any[];
+    /** Accept null (implicit when the default value is null). */
+    nullable?: boolean;
+    /** Return true to accept, or a string to reject with that message. */
+    validate?: (value: any) => true | string | void;
+}
+
+export interface GuildSettingsOptions<T extends Record<string, any> = Record<string, any>> {
+    /** Any Store. Default: MemoryStore (not persisted: use JsonFileStore or RedisStore). */
+    store?: Store;
+    defaults?: T;
+    /** Rules per dot-path key, e.g. { prefix: {...}, 'modules.music': {...} }. */
+    schema?: Record<string, SettingRule>;
+    /** Refuse keys missing from the schema. Default: true when a schema is given. */
+    strict?: boolean;
+    /** Local cache duration ('1m' or ms). 0 disables it. Default: 60000. */
+    cacheTtl?: number | string;
+    /** Key prefix in the store. Default: 'guild-settings'. */
+    namespace?: string;
+}
+
+export interface BoundGuildSettings<T extends Record<string, any> = Record<string, any>> {
+    readonly guildId: string | null;
+    get(): Promise<T>;
+    get<V = any>(key: string): Promise<V>;
+    set(key: string, value: any): Promise<T>;
+    set(patch: Record<string, any>): Promise<T>;
+    reset(key?: string): Promise<T>;
+}
+
+export declare class GuildSettings<T extends Record<string, any> = Record<string, any>> {
+    constructor(options?: GuildSettingsOptions<T>);
+    readonly store: Store;
+    readonly defaults: T;
+    /** Defaults merged with the guild's overrides. A falsy guildId (DMs) returns the defaults. */
+    get(guildId: string | null | undefined): Promise<T>;
+    get<V = any>(guildId: string | null | undefined, key: string): Promise<V>;
+    /** Only the values the guild changed. */
+    overrides(guildId: string): Promise<Partial<T>>;
+    /** Validates then writes. Throws ValidationError with a user-facing message. */
+    set(guildId: string, key: string, value: any): Promise<T>;
+    set(guildId: string, patch: Record<string, any>): Promise<T>;
+    /** Restores the default of one key, or of all keys. */
+    reset(guildId: string, key?: string): Promise<T>;
+    /** Removes everything stored for the guild (e.g. on guildDelete). */
+    delete(guildId: string): Promise<void>;
+    invalidate(guildId?: string): void;
+    for(guildId: string | null | undefined): BoundGuildSettings<T>;
+    validate(key: string, value: any): void;
+}
+
+export declare function createGuildSettings<T extends Record<string, any> = Record<string, any>>(options?: GuildSettingsOptions<T>): GuildSettings<T>;
+
+export declare const discordPermissions: {
+    /** Permission name → bit, named like discord.js's PermissionFlagsBits. */
+    readonly PermissionFlags: Readonly<Record<string, bigint>>;
+    /** Names are case/underscore insensitive: 'ManageRoles', 'MANAGE_ROLES'. Throws on unknown names. */
+    resolvePermissions(perms: PermissionResolvable): bigint;
+    /** Names missing from `have`; Administrator grants everything. */
+    missingPermissions(have: bigint, required: PermissionResolvable): string[];
+    /** 'ManageRoles' → 'Manage Roles'. */
+    formatPermission(name: string): string;
+    /** Reads a PermissionsBitField, bigint or raw API string; null if unknown. */
+    toBitfield(value: unknown): bigint | null;
+};
+
+// ─── Stores ──────────────────────────────────────────────────────────────────
+
+/** Async key/value store shared by RateLimiter, CooldownManager and CommandRegistry. Implement it to plug any backend. */
+export interface Store {
+    get<T = any>(key: string): Promise<T | null>;
+    set(key: string, value: any, ttlMs?: number): Promise<void>;
+    delete(key: string): Promise<boolean>;
+    /** Increments a counter; the TTL is only applied when the key is created (fixed window). */
+    increment(key: string, ttlMs: number, by?: number): Promise<{ value: number; ttl: number | null }>;
+    /** Ms left, null if no expiry, -1 if missing. */
+    ttl(key: string): Promise<number | null>;
+    deleteByPrefix(prefix: string): Promise<number>;
+    /** [key, value] pairs whose key starts with prefix. Optional: only JobScheduler needs it. */
+    entries?(prefix: string): Promise<Array<[string, any]>>;
+}
+
+export declare class MemoryStore implements Store {
+    constructor(options?: { sweepInterval?: number });
+    get<T = any>(key: string): Promise<T | null>;
+    set(key: string, value: any, ttlMs?: number): Promise<void>;
+    delete(key: string): Promise<boolean>;
+    increment(key: string, ttlMs: number, by?: number): Promise<{ value: number; ttl: number | null }>;
+    ttl(key: string): Promise<number | null>;
+    deleteByPrefix(prefix: string): Promise<number>;
+    /** [key, value] pairs whose key starts with prefix. */
+    entries(prefix: string): Promise<Array<[string, any]>>;
+    close(): void;
+}
+
+/** MemoryStore persisted to a JSON file (batched, atomic writes). Call close() on shutdown to flush. */
+export declare class JsonFileStore extends MemoryStore {
+    constructor(options?: { file?: string; writeDelay?: number; sweepInterval?: number });
+    readonly file: string;
+    /** Writes pending changes now. */
+    flush(): void;
+    /** Flushes and stops timers. */
+    close(): void;
+}
+
+export declare class RedisStore implements Store {
+    /** client: a connected ioredis or node-redis (v4+) client. */
+    constructor(options: { client: any; prefix?: string });
+    readonly prefix: string;
+    get<T = any>(key: string): Promise<T | null>;
+    set(key: string, value: any, ttlMs?: number): Promise<void>;
+    delete(key: string): Promise<boolean>;
+    increment(key: string, ttlMs: number, by?: number): Promise<{ value: number; ttl: number | null }>;
+    ttl(key: string): Promise<number | null>;
+    deleteByPrefix(prefix: string): Promise<number>;
+    /** [key, value] pairs whose key starts with prefix. */
+    entries(prefix: string): Promise<Array<[string, any]>>;
+}
+
+// ─── Async (store-backed) variants ───────────────────────────────────────────
+
+export interface RateLimitMiddlewareOptions {
+    /** Identifies the client (default: IP). Return a falsy value to skip limiting. */
+    key?: (req: any) => string | null | undefined | Promise<string | null | undefined>;
+    /** 429 body; objects are sent as JSON. */
+    message?: string | Record<string, any>;
+}
+
+export type RateLimitMiddleware = (req: any, res: any, next?: (err?: any) => void) => Promise<void>;
+
+export interface AsyncRateLimiter {
+    limit: number;
+    window: number;
+    name: string;
+    consume(key: string): Promise<RateLimitStatus>;
+    reset(key: string): Promise<boolean>;
+    resetAll(): Promise<number>;
+    middleware(options?: RateLimitMiddlewareOptions): RateLimitMiddleware;
+}
+
+export declare function createRateLimiter(options: RateLimiterOptions & { store: Store }): AsyncRateLimiter;
+
+export interface AsyncCooldownManager {
+    hit(bucket: string, id: string, rule: CooldownRule): Promise<CooldownResult>;
+    check(bucket: string, id: string, rule: CooldownRule): Promise<CooldownResult>;
+    reset(bucket: string, id?: string): Promise<number>;
+    clear(): void;
+    sweep(): void;
+    destroy(): void;
+}
+
+export declare function createCooldownManager(options: { store: Store; sweepInterval?: number }): AsyncCooldownManager;
+
+// ─── webhookUtils ────────────────────────────────────────────────────────────
+
+/** Always pass the RAW request body (string or Buffer), never a parsed object. */
+export declare const webhookUtils: {
+    sign(payload: string | Uint8Array, secret: string | Uint8Array, options?: { algorithm?: string; encoding?: 'hex' | 'base64' | 'base64url' }): string;
+    verifyHmac(options: {
+        payload: string | Uint8Array;
+        signature: string | undefined | null;
+        secret: string | Uint8Array;
+        algorithm?: string;
+        encoding?: 'hex' | 'base64' | 'base64url';
+        prefix?: string;
+    }): boolean;
+    /** X-Hub-Signature-256 header. */
+    verifyGithub(payload: string | Uint8Array, signatureHeader: string | undefined | null, secret: string): boolean;
+    /** Stripe-Signature header. Default tolerance: 300 s. */
+    verifyStripe(payload: string | Uint8Array, signatureHeader: string | undefined | null, secret: string, options?: { tolerance?: number }): boolean;
+    /** "t=<unix>,v1=<hmac>" header for your own outgoing webhooks. */
+    signTimestamped(payload: string | Uint8Array, secret: string, timestamp?: number): string;
+    verifyTimestamped(payload: string | Uint8Array, header: string | undefined | null, secret: string, options?: { tolerance?: number }): boolean;
+    /** X-Signature-Ed25519 / X-Signature-Timestamp headers of Discord HTTP interactions. */
+    verifyDiscord(payload: string | Uint8Array, signature: string | undefined | null, timestamp: string | undefined | null, publicKey: string): boolean;
+    safeEqual(a: string, b: string): boolean;
+};
+
+// ─── passwordUtils ───────────────────────────────────────────────────────────
+
+export interface PasswordHashOptions {
+    /** scrypt N, power of two. Default: 32768. */
+    cost?: number;
+    blockSize?: number;
+    parallelization?: number;
+    keyLength?: number;
+    saltLength?: number;
+}
+
+export declare const passwordUtils: {
+    /** Returns "$scrypt$n=...,r=...,p=...$salt$hash". */
+    hash(password: string, options?: PasswordHashOptions): Promise<string>;
+    /** Constant-time check; false for malformed hashes. */
+    verify(password: string, stored: string | null | undefined): Promise<boolean>;
+    needsRehash(stored: string, options?: PasswordHashOptions): boolean;
+};
