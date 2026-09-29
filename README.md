@@ -134,6 +134,27 @@ registry.prefix({ name: 'say', aliases: ['echo'], execute: (message, args, ctx) 
 // !say hello "big world"  →  args = ['hello', 'big world']
 ```
 
+**Typed prefix arguments**: declare `args` and `execute` receives parsed values. Invalid input gets an automatic usage
+reply, and it does not consume the cooldown. Optional arguments that do not match are skipped, so their word goes to
+the next argument.
+```javascript
+registry.prefix({
+    name: 'ban',
+    args: [
+        { name: 'user', type: 'user' },                                // <@id>, <@!id> or a raw ID → the ID
+        { name: 'duration', type: 'duration', required: false, max: '30d' }, // "2h", "1d12h" → ms
+        { name: 'reason', type: 'rest', default: 'No reason' },         // every remaining word
+    ],
+    execute: (message, { user, duration, reason }) => { /* ... */ },
+});
+// !ban @alice spamming  →  { user: '1234…', duration: undefined, reason: 'spamming' }
+// !ban nobody           →  ❌ "user" must be a user mention or ID
+//                           Usage: `!ban <user> [duration] [reason...]`
+```
+Types: `string`, `number`, `integer`, `boolean` (yes/no/on/off/oui/non), `user`, `member`, `channel`, `role`, `snowflake`,
+`duration`, `rest`. Rules: `min`, `max`, `choices`, `regex`, `default`. To get objects instead of IDs, pass
+`argResolvers: { user: (id, msg) => msg.client.users.fetch(id).catch(() => null) }` to the registry.
+
 **Loading from folders**: `registry.loadDir('./handlers')` loads files recursively. When a file does not set a
 `type`, it is taken from the folder name (`commands/`, `events/`, `buttons/`, `selects/`, `modals/`, `prefix/`,
 `user/`, `message/`). Files starting with `_` are ignored.

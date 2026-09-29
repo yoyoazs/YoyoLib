@@ -31,6 +31,7 @@ All notable changes to this project will be documented in this file.
   - `autoDefer`: defers interactions not answered after 2 s (Discord's limit is 3 s) and reroutes `reply()` / `update()` so handlers need no change.
   - `botPermissions` / `userPermissions` checks with readable messages; permission names validated at registration; `defaultMemberPermissions` accepts names.
   - `deploy({ onlyIfChanged: true })` skips unchanged commands (hash kept in `.yoyolib/commands-hash.json`); `commandsHash()`.
+- **Typed prefix arguments**: `args: [{ name, type, required, default, min, max, choices, regex }]` with types `string`, `number`, `integer`, `boolean`, `user`, `member`, `channel`, `role`, `snowflake`, `duration`, `rest`; skipping of non-matching optional arguments, automatic usage replies (`messages.usage`), `argResolvers`, `ArgumentError`. Parsing happens before the cooldown.
 - **GuildSettings**: per-guild settings with defaults (only overrides are stored), schema validation (`type` incl. `snowflake`, `min`/`max`, `regex`, `choices`, `nullable`, custom `validate`), local cache with deduplicated reads, `reset()`, `for(guildId)`, and `ctx.settings` in CommandRegistry.
 - **JsonFileStore**: MemoryStore persisted to a JSON file with batched, atomic writes.
 - **discordPermissions**: permission flags, `resolvePermissions`, `missingPermissions`, `formatPermission`, `toBitfield`.

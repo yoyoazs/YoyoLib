@@ -568,7 +568,7 @@ export type HandlerKind = 'slash' | 'userContext' | 'messageContext' | 'button' 
 export type RegistryStatus =
     | 'ok' | 'stopped' | 'not_found' | 'ignored' | 'cooldown'
     | 'denied' | 'guild_only' | 'owner_only' | 'error'
-    | 'bot_missing_permissions' | 'user_missing_permissions';
+    | 'bot_missing_permissions' | 'user_missing_permissions' | 'invalid_args';
 
 export interface HandlerResult {
     handled: boolean;
@@ -595,8 +595,10 @@ export interface HandlerContext<T = any> {
     channelId: string | null;
     /** Values captured from a customId pattern or RegExp named groups. */
     params: Record<string, string>;
-    /** Prefix command arguments (quotes supported). */
+    /** Raw prefix command words (quotes supported). */
     args: string[];
+    /** Parsed prefix arguments when the command declares `args`. */
+    options?: Record<string, any>;
     /** "sub" or "group sub" for slash commands. */
     subcommand: string | null;
     /** Prefix and alias used, for prefix commands. */
@@ -690,12 +692,39 @@ export interface ComponentDefinition<T = any> extends HandlerChecks<T> {
     execute: (interaction: T, ctx: HandlerContext<T>) => any;
 }
 
+export type ArgumentType =
+    | 'string' | 'number' | 'integer' | 'boolean'
+    | 'user' | 'member' | 'channel' | 'role' | 'snowflake'
+    | 'duration' | 'rest';
+
+export interface ArgumentDefinition {
+    name: string;
+    /** Default: 'string'. Mentions and IDs give the ID (or the resolver's result); durations give ms; 'rest' joins the remaining words. */
+    type?: ArgumentType;
+    /** Default: true, unless a `default` is given. Optional arguments that do not match are skipped. */
+    required?: boolean;
+    default?: any;
+    /** Length (strings), value (numbers) or duration ('1m') bounds. */
+    min?: number | string;
+    max?: number | string;
+    choices?: any[];
+    regex?: RegExp;
+    description?: string;
+}
+
+export declare class ArgumentError extends Error {
+    readonly arg: ArgumentDefinition;
+}
+
 export interface PrefixDefinition<T = any> extends HandlerChecks<T> {
     type?: 'prefix';
     name: string;
     aliases?: string[];
     description?: string;
-    execute: (message: T, args: string[], ctx: HandlerContext<T>) => any;
+    /** Typed arguments. When set, execute() receives the parsed values instead of raw words. */
+    args?: ArgumentDefinition[];
+    /** `args` is a Record of parsed values when an `args` schema is given, the raw words otherwise. */
+    execute: (message: T, args: any, ctx: HandlerContext<T>) => any;
 }
 
 export interface EventDefinition {
@@ -718,6 +747,8 @@ export interface RegistryMessages {
     error(ctx: HandlerContext, error: Error): ReplyContent | Promise<ReplyContent>;
     botPermissions(ctx: HandlerContext, missing: string[]): ReplyContent | Promise<ReplyContent>;
     userPermissions(ctx: HandlerContext, missing: string[]): ReplyContent | Promise<ReplyContent>;
+    /** Invalid prefix arguments; `usage` looks like "!ban <user> [duration] [reason...]". */
+    usage(ctx: HandlerContext, error: ArgumentError, usage: string): ReplyContent | Promise<ReplyContent>;
 }
 
 export interface CommandRegistryOptions {
@@ -739,6 +770,8 @@ export interface CommandRegistryOptions {
     autoDefer?: boolean | AutoDeferOptions;
     /** Exposes ctx.settings bound to the current guild. */
     settings?: GuildSettings<any>;
+    /** Turn parsed IDs of prefix arguments into objects; return null when not found. */
+    argResolvers?: Partial<Record<'user' | 'member' | 'channel' | 'role', (id: string, message: any) => any>>;
 }
 
 export declare class CommandRegistry {
