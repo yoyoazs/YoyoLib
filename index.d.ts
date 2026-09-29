@@ -305,8 +305,12 @@ export declare const stringUtils: {
 // ─── SaaS Modules ─────────────────────────────────────────────────────────────
 
 export interface RateLimiterOptions {
+    /** Max hits per window. Default: 100. */
     limit?: number;
+    /** Window in seconds. Default: 60. */
     window?: number;
+    /** Key namespace inside a shared store. Default: 'default'. */
+    name?: string;
 }
 
 export interface RateLimitStatus {
@@ -320,8 +324,12 @@ export declare class RateLimiter {
     constructor(options?: RateLimiterOptions);
     limit: number;
     window: number;
+    name: string;
     consume(key: string): RateLimitStatus;
+    reset(key: string): boolean;
     resetAll(): void;
+    /** Express / Connect / node:http middleware (RateLimit-* headers, 429 + Retry-After). */
+    middleware(options?: RateLimitMiddlewareOptions): RateLimitMiddleware;
 }
 
 export declare function createRateLimiter(options?: RateLimiterOptions): RateLimiter;
@@ -332,6 +340,10 @@ export declare const cryptoUtils: {
     randomString(length?: number): string;
     encrypt(text: string, secret: string): string;
     decrypt(encryptedData: string, secret: string): string;
+    /** Returns the key to show once, and the hash to store. */
+    generateApiKey(options?: { prefix?: string; bytes?: number }): { key: string; hash: string; last4: string };
+    hashApiKey(key: string): string;
+    safeEqual(a: string, b: string): boolean;
 };
 
 export declare const jwtUtils: {
@@ -534,6 +546,7 @@ export interface CooldownResult {
 }
 
 export declare class CooldownManager {
+    /** For a store-backed (async) manager, use createCooldownManager({ store }). */
     constructor(options?: { sweepInterval?: number });
     /** Consumes one use of `id` in `bucket`. */
     hit(bucket: string, id: string, rule: CooldownRule): CooldownResult;
@@ -682,7 +695,9 @@ export interface CommandRegistryOptions {
     mentionPrefix?: boolean;
     /** Owners pass ownerOnly handlers and bypass cooldowns. */
     ownerIds?: string[];
-    cooldowns?: CooldownManager;
+    cooldowns?: CooldownManager | AsyncCooldownManager;
+    /** Store for the internally created CooldownManager (e.g. RedisStore to share cooldowns between shards). */
+    store?: Store;
     lang?: LangManager;
     /** Locale used for ctx.t. Default: interaction locale, then guild locale. */
     locale?: (target: any, ctx: HandlerContext) => string | null | Promise<string | null>;
@@ -692,7 +707,7 @@ export interface CommandRegistryOptions {
 
 export declare class CommandRegistry {
     constructor(options?: CommandRegistryOptions);
-    readonly cooldowns: CooldownManager;
+    readonly cooldowns: CooldownManager | AsyncCooldownManager;
     client: any;
 
     register(def: HandlerDefinition | HandlerDefinition[]): this;
@@ -727,3 +742,118 @@ export declare class CommandRegistry {
 }
 
 export declare function createCommandRegistry(options?: CommandRegistryOptions): CommandRegistry;
+
+// ─── Stores ──────────────────────────────────────────────────────────────────
+
+/** Async key/value store shared by RateLimiter, CooldownManager and CommandRegistry. Implement it to plug any backend. */
+export interface Store {
+    get<T = any>(key: string): Promise<T | null>;
+    set(key: string, value: any, ttlMs?: number): Promise<void>;
+    delete(key: string): Promise<boolean>;
+    /** Increments a counter; the TTL is only applied when the key is created (fixed window). */
+    increment(key: string, ttlMs: number, by?: number): Promise<{ value: number; ttl: number | null }>;
+    /** Ms left, null if no expiry, -1 if missing. */
+    ttl(key: string): Promise<number | null>;
+    deleteByPrefix(prefix: string): Promise<number>;
+}
+
+export declare class MemoryStore implements Store {
+    constructor(options?: { sweepInterval?: number });
+    get<T = any>(key: string): Promise<T | null>;
+    set(key: string, value: any, ttlMs?: number): Promise<void>;
+    delete(key: string): Promise<boolean>;
+    increment(key: string, ttlMs: number, by?: number): Promise<{ value: number; ttl: number | null }>;
+    ttl(key: string): Promise<number | null>;
+    deleteByPrefix(prefix: string): Promise<number>;
+    close(): void;
+}
+
+export declare class RedisStore implements Store {
+    /** client: a connected ioredis or node-redis (v4+) client. */
+    constructor(options: { client: any; prefix?: string });
+    readonly prefix: string;
+    get<T = any>(key: string): Promise<T | null>;
+    set(key: string, value: any, ttlMs?: number): Promise<void>;
+    delete(key: string): Promise<boolean>;
+    increment(key: string, ttlMs: number, by?: number): Promise<{ value: number; ttl: number | null }>;
+    ttl(key: string): Promise<number | null>;
+    deleteByPrefix(prefix: string): Promise<number>;
+}
+
+// ─── Async (store-backed) variants ───────────────────────────────────────────
+
+export interface RateLimitMiddlewareOptions {
+    /** Identifies the client (default: IP). Return a falsy value to skip limiting. */
+    key?: (req: any) => string | null | undefined | Promise<string | null | undefined>;
+    /** 429 body; objects are sent as JSON. */
+    message?: string | Record<string, any>;
+}
+
+export type RateLimitMiddleware = (req: any, res: any, next?: (err?: any) => void) => Promise<void>;
+
+export interface AsyncRateLimiter {
+    limit: number;
+    window: number;
+    name: string;
+    consume(key: string): Promise<RateLimitStatus>;
+    reset(key: string): Promise<boolean>;
+    resetAll(): Promise<number>;
+    middleware(options?: RateLimitMiddlewareOptions): RateLimitMiddleware;
+}
+
+export declare function createRateLimiter(options: RateLimiterOptions & { store: Store }): AsyncRateLimiter;
+
+export interface AsyncCooldownManager {
+    hit(bucket: string, id: string, rule: CooldownRule): Promise<CooldownResult>;
+    check(bucket: string, id: string, rule: CooldownRule): Promise<CooldownResult>;
+    reset(bucket: string, id?: string): Promise<number>;
+    clear(): void;
+    sweep(): void;
+    destroy(): void;
+}
+
+export declare function createCooldownManager(options: { store: Store; sweepInterval?: number }): AsyncCooldownManager;
+
+// ─── webhookUtils ────────────────────────────────────────────────────────────
+
+/** Always pass the RAW request body (string or Buffer), never a parsed object. */
+export declare const webhookUtils: {
+    sign(payload: string | Uint8Array, secret: string | Uint8Array, options?: { algorithm?: string; encoding?: 'hex' | 'base64' | 'base64url' }): string;
+    verifyHmac(options: {
+        payload: string | Uint8Array;
+        signature: string | undefined | null;
+        secret: string | Uint8Array;
+        algorithm?: string;
+        encoding?: 'hex' | 'base64' | 'base64url';
+        prefix?: string;
+    }): boolean;
+    /** X-Hub-Signature-256 header. */
+    verifyGithub(payload: string | Uint8Array, signatureHeader: string | undefined | null, secret: string): boolean;
+    /** Stripe-Signature header. Default tolerance: 300 s. */
+    verifyStripe(payload: string | Uint8Array, signatureHeader: string | undefined | null, secret: string, options?: { tolerance?: number }): boolean;
+    /** "t=<unix>,v1=<hmac>" header for your own outgoing webhooks. */
+    signTimestamped(payload: string | Uint8Array, secret: string, timestamp?: number): string;
+    verifyTimestamped(payload: string | Uint8Array, header: string | undefined | null, secret: string, options?: { tolerance?: number }): boolean;
+    /** X-Signature-Ed25519 / X-Signature-Timestamp headers of Discord HTTP interactions. */
+    verifyDiscord(payload: string | Uint8Array, signature: string | undefined | null, timestamp: string | undefined | null, publicKey: string): boolean;
+    safeEqual(a: string, b: string): boolean;
+};
+
+// ─── passwordUtils ───────────────────────────────────────────────────────────
+
+export interface PasswordHashOptions {
+    /** scrypt N, power of two. Default: 32768. */
+    cost?: number;
+    blockSize?: number;
+    parallelization?: number;
+    keyLength?: number;
+    saltLength?: number;
+}
+
+export declare const passwordUtils: {
+    /** Returns "$scrypt$n=...,r=...,p=...$salt$hash". */
+    hash(password: string, options?: PasswordHashOptions): Promise<string>;
+    /** Constant-time check; false for malformed hashes. */
+    verify(password: string, stored: string | null | undefined): Promise<boolean>;
+    needsRehash(stored: string, options?: PasswordHashOptions): boolean;
+};

@@ -7,7 +7,7 @@ A lightweight, **zero-dependency** Node.js toolkit for production-grade applicat
 ## Navigation
 - [Core Utilities](#core-utilities) (Logger, Lang, Config, Cache, EventBus, Env)
 - [Discord Bots](#discord-bots) (CommandRegistry, CooldownManager)
-- [Security & Privacy](#security--privacy) (JWT, AES, DataMasker, RateLimiter)
+- [Security & Privacy](#security--privacy) (JWT, AES, DataMasker, RateLimiter, Stores, Webhooks, Passwords, API keys)
 - [Network & Resilience](#network--resilience) (HTTP Client, Circuit Breaker, API Utils)
 - [Monitoring & Lifecycle](#monitoring--lifecycle) (Health, Shutdown, ErrorReporter, Profiler)
 - [Advanced Data & Tasks](#advanced-data--tasks) (Flatten, Path, Validator, JobQueue, Scheduler)
@@ -190,13 +190,66 @@ const masked = masker.mask({ email: 'user@test.com', password: '123' });
 ```
 
 ### RateLimiter
-Window-based throttling for API protection.
+Fixed-window throttling for API protection, with a ready-made HTTP middleware.
 ```javascript
 const { createRateLimiter } = require('yoyolib');
 const limiter = createRateLimiter({ limit: 100, window: 60 }); // 100 req/min
 
 const status = limiter.consume('user-ip-address');
 if (!status.allowed) console.log(`Retry in ${status.resetIn}ms`);
+
+// Express / Connect / node:http: RateLimit-* headers, 429 + Retry-After
+app.use(limiter.middleware());
+app.use('/api', limiter.middleware({ key: (req) => req.user?.id })); // falsy key = not limited
+```
+
+### Shared stores (Redis, multi-instance, sharding)
+By default, state lives in process memory. Pass a `store` to share it between several servers, workers or Discord
+shards. With a store, `consume()` / `hit()` / `check()` / `reset()` return Promises.
+```javascript
+const Redis = require('ioredis'); // or node-redis v4+: createClient().connect()
+const { RedisStore, createRateLimiter, createCooldownManager, createCommandRegistry } = require('yoyolib');
+
+const store = new RedisStore({ client: new Redis(process.env.REDIS_URL), prefix: 'myapp:' });
+
+const limiter = createRateLimiter({ limit: 100, window: 60, store, name: 'api' });
+await limiter.consume(ip);
+
+const cooldowns = createCooldownManager({ store });
+const registry = createCommandRegistry({ store }); // cooldowns shared by every shard
+```
+YoyoLib does not depend on Redis: you pass your own client. To use another backend, implement the async
+`Store` interface: `get`, `set`, `delete`, `increment`, `ttl`, `deleteByPrefix` (`MemoryStore` is the reference).
+
+### Webhook verification
+Verify incoming webhooks and sign the ones your SaaS sends. Always pass the **raw** body, not a re-serialized
+object. With Express, use `express.raw({ type: 'application/json' })`.
+```javascript
+const { webhookUtils } = require('yoyolib');
+
+webhookUtils.verifyStripe(req.body, req.headers['stripe-signature'], process.env.STRIPE_WHSEC); // 5 min tolerance
+webhookUtils.verifyGithub(req.body, req.headers['x-hub-signature-256'], process.env.GITHUB_SECRET);
+
+// Discord HTTP interactions (answer 401 when false: Discord tests it on purpose)
+webhookUtils.verifyDiscord(req.body, req.headers['x-signature-ed25519'], req.headers['x-signature-timestamp'], PUBLIC_KEY);
+
+// Your own outgoing webhooks, Stripe-style "t=...,v1=..." header
+const header = webhookUtils.signTimestamped(JSON.stringify(event), customer.webhookSecret);
+```
+
+### Passwords & API keys
+```javascript
+const { passwordUtils, cryptoUtils } = require('yoyolib');
+
+// scrypt (built into Node), salted, self-describing hash: "$scrypt$n=32768,r=8,p=1$salt$hash"
+const stored = await passwordUtils.hash(password);
+if (await passwordUtils.verify(attempt, stored)) {
+    if (passwordUtils.needsRehash(stored)) await saveHash(await passwordUtils.hash(attempt));
+}
+
+// API keys: show `key` once, store only `hash`
+const { key, hash, last4 } = cryptoUtils.generateApiKey({ prefix: 'sk_live' });
+const row = await db.apiKeys.findOne({ hash: cryptoUtils.hashApiKey(req.headers['x-api-key']) });
 ```
 
 ---
@@ -368,7 +421,7 @@ No data is sent anywhere else, and we collect zero analytics.
 - **Registry**: 0 external dependencies.
 - **Node.js**: Requires version 18.0.0 or higher.
 - **TypeScript**: Included `index.d.ts` for full intellisense.
-- **CI/CD**: Fully tested suite (110+ unit tests) on Node 18, 20, 22.
+- **CI/CD**: Fully tested suite (130 unit tests) on Node 18, 20, 22.
 
 ---
 
