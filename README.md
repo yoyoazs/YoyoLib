@@ -88,6 +88,7 @@ const registry = createCommandRegistry({
     ownerIds: ['123456789'],               // pass ownerOnly handlers, bypass cooldowns
     lang: createLangManager({ autoLoad: true, fallback: 'en' }), // enables ctx.t
     onError: (err, ctx) => logger.error(err),
+    autoDefer: true,                       // no more "The application did not respond" (see below)
 });
 
 // Slash command with subcommands ("sub" or "group sub")
@@ -121,7 +122,9 @@ registry.event({ name: 'ready', once: true, execute: (client, ctx) => console.lo
 registry.use(async (ctx, next) => { const t = Date.now(); await next(); console.log(ctx.name, Date.now() - t, 'ms'); });
 
 registry.attach(client);                   // routes interactionCreate, messageCreate and events
-await registry.deploy({ token, applicationId, guildId }); // registers slash + context menus (omit guildId for global)
+// Registers slash + context menus (omit guildId for global). onlyIfChanged skips the call when nothing changed
+// (hash kept in .yoyolib/commands-hash.json: add .yoyolib/ to your .gitignore).
+await registry.deploy({ token, applicationId, guildId, onlyIfChanged: true });
 client.login(token);
 ```
 
@@ -143,8 +146,25 @@ module.exports = { name: 'ping', description: 'Pong!', cooldown: '3s', execute: 
 `commands.ping.description` fill `name_localizations` / `description_localizations` in `toJSON()` and `deploy()`.
 Name your language files with Discord locale codes (`fr.json`, `en-US.json`...).
 
-Default replies (cooldown, guildOnly, ownerOnly, denied, error) are ephemeral and can be overridden through
-`messages: { cooldown: (ctx, res) => ctx.t('cooldown', { time: res.remainingText }) }`.
+**Auto-defer**: Discord drops interactions that get no answer within 3 seconds. With `autoDefer: true` (globally or per
+handler), the registry calls `deferReply()` (`deferUpdate()` for buttons and selects) if the handler has not answered after
+2 s. Your code does not change: `interaction.reply()` and `interaction.update()` are rerouted to `editReply()` / `followUp()`.
+Options: `{ after: 2000, ephemeral: false, update: true }`. Disable it (`autoDefer: false`) on handlers that open a modal after
+a slow operation, since a modal must be the first response.
+
+**Permissions**: `botPermissions` and `userPermissions` are checked before running the handler. The user gets a clear message
+instead of a 403 from the API. `defaultMemberPermissions` also accepts names.
+```javascript
+registry.slash({
+    name: 'ban', description: 'Ban a member',
+    defaultMemberPermissions: ['BanMembers'],   // hides the command from members without it
+    botPermissions: ['BanMembers'],             // "❌ I need these permissions: Ban Members."
+    execute: async (interaction) => { /* ... */ },
+});
+```
+
+Default replies (cooldown, guildOnly, ownerOnly, denied, error, botPermissions, userPermissions) are ephemeral and can be
+overridden through `messages: { cooldown: (ctx, res) => ctx.t('cooldown', { time: res.remainingText }) }`.
 
 ### CooldownManager
 Standalone cooldowns (used internally by CommandRegistry).

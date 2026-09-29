@@ -567,7 +567,8 @@ export type HandlerKind = 'slash' | 'userContext' | 'messageContext' | 'button' 
 
 export type RegistryStatus =
     | 'ok' | 'stopped' | 'not_found' | 'ignored' | 'cooldown'
-    | 'denied' | 'guild_only' | 'owner_only' | 'error';
+    | 'denied' | 'guild_only' | 'owner_only' | 'error'
+    | 'bot_missing_permissions' | 'user_missing_permissions';
 
 export interface HandlerResult {
     handled: boolean;
@@ -576,6 +577,8 @@ export interface HandlerResult {
     name?: string;
     cooldown?: CooldownResult;
     error?: Error;
+    /** Missing permission names for *_missing_permissions statuses. */
+    missing?: string[];
 }
 
 export interface HandlerContext<T = any> {
@@ -606,6 +609,20 @@ export interface HandlerContext<T = any> {
     /** Present when a LangManager is configured. */
     t?: BoundTranslator;
     locale?: string | null;
+    /** Set when the registry deferred the interaction automatically. */
+    autoDeferred?: 'reply' | 'update';
+}
+
+/** Permission names ('BanMembers', 'BAN_MEMBERS'), bits, or an array of them. */
+export type PermissionResolvable = string | bigint | number | Array<string | bigint | number>;
+
+export interface AutoDeferOptions {
+    /** Delay before deferring, in ms. Default: 2000 (Discord's limit is 3000). */
+    after?: number;
+    /** Defer with an ephemeral "is thinking..." message. Default: false. */
+    ephemeral?: boolean;
+    /** Use deferUpdate() instead of deferReply(). Default: true for buttons and selects. */
+    update?: boolean;
 }
 
 export type CooldownScope = 'user' | 'member' | 'guild' | 'channel' | 'global';
@@ -617,6 +634,16 @@ export interface HandlerChecks<T = any> {
     ownerOnly?: boolean;
     /** Return true to allow, false to deny, or a string to deny with that message. */
     check?: (target: T, ctx: HandlerContext<T>) => boolean | string | void | Promise<boolean | string | void>;
+    /** Permissions the bot needs in the channel. Checked when the payload carries them. */
+    botPermissions?: PermissionResolvable;
+    /** Permissions the user needs (runtime check, also useful for prefix commands). */
+    userPermissions?: PermissionResolvable;
+    /**
+     * Defers the interaction when the handler has not answered in time. Once deferred,
+     * interaction.reply() / update() keep working (rerouted to editReply / followUp).
+     * Disable it for handlers that open a modal after a slow operation.
+     */
+    autoDefer?: boolean | AutoDeferOptions;
 }
 
 export type SubcommandHandler<T = any> =
@@ -632,7 +659,8 @@ export interface CommandDefinitionBase<T = any> extends HandlerChecks<T> {
     data?: { toJSON(): any } | Record<string, any>;
     /** LangManager key prefix: `<i18n>.name` and `<i18n>.description` fill the localizations. */
     i18n?: string;
-    defaultMemberPermissions?: string | number | bigint;
+    /** null = everyone, '0' = admins only, otherwise permission names or bits. */
+    defaultMemberPermissions?: PermissionResolvable | null;
     contexts?: number[];
     integrationTypes?: number[];
     nsfw?: boolean;
@@ -686,6 +714,8 @@ export interface RegistryMessages {
     ownerOnly(ctx: HandlerContext): ReplyContent | Promise<ReplyContent>;
     denied(ctx: HandlerContext): ReplyContent | Promise<ReplyContent>;
     error(ctx: HandlerContext, error: Error): ReplyContent | Promise<ReplyContent>;
+    botPermissions(ctx: HandlerContext, missing: string[]): ReplyContent | Promise<ReplyContent>;
+    userPermissions(ctx: HandlerContext, missing: string[]): ReplyContent | Promise<ReplyContent>;
 }
 
 export interface CommandRegistryOptions {
@@ -703,6 +733,8 @@ export interface CommandRegistryOptions {
     locale?: (target: any, ctx: HandlerContext) => string | null | Promise<string | null>;
     messages?: Partial<RegistryMessages>;
     onError?: (error: Error, ctx: HandlerContext) => any;
+    /** Default autoDefer for every handler (overridable per handler). Default: false. */
+    autoDefer?: boolean | AutoDeferOptions;
 }
 
 export declare class CommandRegistry {
@@ -736,12 +768,35 @@ export declare class CommandRegistry {
     /** Application command payloads (slash + context menus). */
     toJSON(): Record<string, any>[];
     /** Overwrites the application commands (globally or in one guild). */
-    deploy(options: { token: string; applicationId: string; guildId?: string }): Promise<any[]>;
+    deploy(options: {
+        token: string;
+        applicationId: string;
+        guildId?: string;
+        /** Skip the API call when commands did not change since the last deploy. Default: false. */
+        onlyIfChanged?: boolean;
+        /** Default: '.yoyolib/commands-hash.json'. */
+        cacheFile?: string;
+    }): Promise<any[] | null>;
+    /** Stable sha256 of toJSON(). */
+    commandsHash(): string;
 
     static buildCustomId(pattern: string, params?: Record<string, string | number>): string;
 }
 
 export declare function createCommandRegistry(options?: CommandRegistryOptions): CommandRegistry;
+
+export declare const discordPermissions: {
+    /** Permission name → bit, named like discord.js's PermissionFlagsBits. */
+    readonly PermissionFlags: Readonly<Record<string, bigint>>;
+    /** Names are case/underscore insensitive: 'ManageRoles', 'MANAGE_ROLES'. Throws on unknown names. */
+    resolvePermissions(perms: PermissionResolvable): bigint;
+    /** Names missing from `have`; Administrator grants everything. */
+    missingPermissions(have: bigint, required: PermissionResolvable): string[];
+    /** 'ManageRoles' → 'Manage Roles'. */
+    formatPermission(name: string): string;
+    /** Reads a PermissionsBitField, bigint or raw API string; null if unknown. */
+    toBitfield(value: unknown): bigint | null;
+};
 
 // ─── Stores ──────────────────────────────────────────────────────────────────
 

@@ -27,6 +27,10 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 - **CommandRegistry** (Discord bots): one router for slash commands (with subcommands and groups), user/message context menus, autocomplete, buttons, select menus, modals, prefix commands and gateway events. customId patterns (`ticket:close:{id}`) and RegExp, cooldowns (user/member/guild/channel/global scopes), `guildOnly` / `ownerOnly` / `check()`, middlewares, error handling with ephemeral replies, `ctx.t` from LangManager, `loadDir()` with type inference from folder names, `toJSON()` / `deploy()` to register commands through the Discord API. Works with discord.js v14+ objects and raw API payloads, without dependencies.
+  - `autoDefer`: defers interactions not answered after 2 s (Discord's limit is 3 s) and reroutes `reply()` / `update()` so handlers need no change.
+  - `botPermissions` / `userPermissions` checks with readable messages; permission names validated at registration; `defaultMemberPermissions` accepts names.
+  - `deploy({ onlyIfChanged: true })` skips unchanged commands (hash kept in `.yoyolib/commands-hash.json`); `commandsHash()`.
+- **discordPermissions**: permission flags, `resolvePermissions`, `missingPermissions`, `formatPermission`, `toBitfield`.
 - **CooldownManager**: per-key cooldowns with several uses per window, `check()` without consuming, `reset()`, automatic cleanup.
 - **Stores**: `MemoryStore` and `RedisStore` (bring your own ioredis or node-redis v4+ client) behind a small async `Store` interface. `RateLimiter`, `CooldownManager` and `CommandRegistry` accept `store` to share limits and cooldowns between processes or shards; their methods then return Promises.
 - **RateLimiter**: `middleware()` for Express / Connect / node:http (RateLimit-* headers, 429 + Retry-After), `reset(key)`, `name` option.
