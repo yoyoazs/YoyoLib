@@ -198,6 +198,20 @@ if (!res.ok) return reply(`Come back in ${res.remainingText}`); // "3 hours 12 m
 cooldowns.reset('daily', userId);
 ```
 
+### discordFormat
+Formatting helpers and API limits.
+```javascript
+const { discordFormat: f } = require('yoyolib');
+
+f.timestamp(Date.now() + 3600000, 'R');     // "<t:…:R>" → "in an hour", in each user's timezone
+f.userMention(id); f.channelMention(id); f.roleMention(id); f.commandMention('config set', commandId);
+f.escapeMarkdown(member.displayName);        // show user input as typed
+f.codeBlock(output, 'js'); f.inlineCode(value);
+f.truncate(reason, f.LIMITS.embedFieldValue);
+
+for (const chunk of f.splitMessage(longLog, { prepend: '```\n', append: '\n```' })) await channel.send(chunk);
+```
+
 ### GuildSettings
 Per-guild settings (prefix, language, log channel, modules...) with defaults, validation and a local cache.
 Only the values a guild changed are stored, so a new default applies to every guild that did not override it.

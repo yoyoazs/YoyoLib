@@ -822,6 +822,36 @@ export declare class CommandRegistry {
 
 export declare function createCommandRegistry(options?: CommandRegistryOptions): CommandRegistry;
 
+// ─── Bot: discordFormat ──────────────────────────────────────────────────────
+
+export type TimestampStyle = 't' | 'T' | 'd' | 'D' | 'f' | 'F' | 'R';
+
+export declare const discordFormat: {
+    /** Discord API limits (characters unless stated otherwise). */
+    readonly LIMITS: Readonly<{
+        message: number; embedTitle: number; embedDescription: number; embedFields: number;
+        embedFieldName: number; embedFieldValue: number; embedFooter: number; embedAuthor: number;
+        embedTotal: number; embedsPerMessage: number; customId: number; buttonLabel: number;
+        selectOptions: number; componentsPerRow: number; rowsPerMessage: number; choices: number;
+    }>;
+    /** "<t:unix:style>", shown in each user's timezone. 'R' = relative. Default style: 'f'. */
+    timestamp(date: Date | number | string, style?: TimestampStyle): string;
+    userMention(id: string): string;
+    channelMention(id: string): string;
+    roleMention(id: string): string;
+    /** "</name:id>", clickable slash command. */
+    commandMention(name: string, id: string): string;
+    emoji(name: string, id: string, animated?: boolean): string;
+    hyperlink(text: string, url: string): string;
+    hideLinkEmbed(url: string): string;
+    escapeMarkdown(text: string): string;
+    codeBlock(content: string, language?: string): string;
+    inlineCode(content: string): string;
+    truncate(text: string, max: number, suffix?: string): string;
+    /** Splits at line breaks, then spaces, then anywhere. Default maxLength: 2000. */
+    splitMessage(text: string, options?: { maxLength?: number; separators?: string[]; prepend?: string; append?: string }): string[];
+};
+
 // ─── Bot: GuildSettings ──────────────────────────────────────────────────────
 
 export interface SettingRule {
