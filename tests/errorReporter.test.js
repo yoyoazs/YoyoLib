@@ -21,6 +21,44 @@ test('ErrorReporter - manual reporting with mock fetch', async (t) => {
     global.fetch = originalFetch;
 });
 
+test('ErrorReporter - Discord webhooks receive an embed payload', async () => {
+    let sentPayload = null;
+    const originalFetch = global.fetch;
+    global.fetch = async (url, options) => {
+        sentPayload = JSON.parse(options.body);
+        return { ok: true, status: 204, headers: { get: () => null }, text: async () => '' };
+    };
+
+    try {
+        const reporter = createErrorReporter('https://discord.com/api/webhooks/123/abc', { appName: 'MyBot' });
+        await reporter.report(new Error('Boom'), { guild: '42' });
+
+        assert.strictEqual(sentPayload.username, 'MyBot');
+        assert.ok(Array.isArray(sentPayload.embeds));
+        assert.ok(sentPayload.embeds[0].title.includes('Boom'));
+        assert.ok(sentPayload.embeds[0].fields[0].value.includes('"guild": "42"'));
+    } finally {
+        global.fetch = originalFetch;
+    }
+});
+
+test('ErrorReporter - Slack webhooks receive a text payload', async () => {
+    let sentPayload = null;
+    const originalFetch = global.fetch;
+    global.fetch = async (url, options) => {
+        sentPayload = JSON.parse(options.body);
+        return { ok: true, headers: { get: () => null }, text: async () => 'ok' };
+    };
+
+    try {
+        const reporter = createErrorReporter('https://hooks.slack.com/services/T/B/X');
+        await reporter.report('Slack error');
+        assert.ok(sentPayload.text.includes('Slack error'));
+    } finally {
+        global.fetch = originalFetch;
+    }
+});
+
 test('ErrorReporter - wrap async function', async (t) => {
     let callCount = 0;
     const originalFetch = global.fetch;

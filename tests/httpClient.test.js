@@ -75,6 +75,41 @@ test('httpClient - timeout aborts slowly responding requests', async (t) => {
     }
 });
 
+test('httpClient - does not retry 4xx client errors', async () => {
+    const originalFetch = global.fetch;
+    let calls = 0;
+    global.fetch = async () => {
+        calls++;
+        return { ok: false, status: 404, statusText: 'Not Found', headers: { get: () => null }, text: async () => '' };
+    };
+
+    try {
+        await assert.rejects(httpClient.get('http://api.com/x', { retries: 3, retryDelay: 0 }), { status: 404 });
+        assert.strictEqual(calls, 1);
+    } finally {
+        global.fetch = originalFetch;
+    }
+});
+
+test('httpClient - retries 5xx and honors Retry-After on 429', async () => {
+    const originalFetch = global.fetch;
+    const responses = [
+        { ok: false, status: 503, statusText: 'Unavailable', headers: { get: () => null }, text: async () => '' },
+        { ok: false, status: 429, statusText: 'Too Many', headers: { get: (h) => h === 'retry-after' ? '0' : null }, text: async () => '' },
+        { ok: true, status: 200, headers: { get: () => 'application/json' }, json: async () => ({ done: true }) },
+    ];
+    let calls = 0;
+    global.fetch = async () => responses[calls++];
+
+    try {
+        const res = await httpClient.get('http://api.com/x', { retries: 3, retryDelay: 0 });
+        assert.deepStrictEqual(res, { done: true });
+        assert.strictEqual(calls, 3);
+    } finally {
+        global.fetch = originalFetch;
+    }
+});
+
 test('httpClient - formats bearer token correctly', async (t) => {
     let sentHeaders;
     const originalFetch = global.fetch;

@@ -34,6 +34,34 @@ test('jwtUtils - fails on bad secret', (t) => {
     assert.throws(() => jwtUtils.verify(token, 'wrong_secret'), { message: 'Invalid signature' });
 });
 
+test('jwtUtils - accepts duration strings and options objects', () => {
+    const now = Math.floor(Date.now() / 1000);
+    const fromString = jwtUtils.decode(jwtUtils.sign({ id: 1 }, SECRET, '1h'));
+    const fromOptions = jwtUtils.decode(jwtUtils.sign({ id: 1 }, SECRET, { expiresIn: '15m' }));
+
+    assert.strictEqual(typeof fromString.exp, 'number');
+    assert.ok(Math.abs(fromString.exp - (now + 3600)) <= 1);
+    assert.ok(Math.abs(fromOptions.exp - (now + 900)) <= 1);
+});
+
+test('jwtUtils - rejects a non-numeric exp claim', () => {
+    const crypto = require('node:crypto');
+    const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+    const body = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ id: 1, exp: '99999999999[object Object]' })}`;
+    const sig = crypto.createHmac('sha256', SECRET).update(body).digest('base64url');
+
+    assert.throws(() => jwtUtils.verify(`${body}.${sig}`, SECRET), { message: 'Invalid exp claim' });
+});
+
+test('jwtUtils - rejects tokens whose header is not HS256', () => {
+    const crypto = require('node:crypto');
+    const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+    const body = `${b64({ alg: 'none', typ: 'JWT' })}.${b64({ id: 1 })}`;
+    const sig = crypto.createHmac('sha256', SECRET).update(body).digest('base64url');
+
+    assert.throws(() => jwtUtils.verify(`${body}.${sig}`, SECRET), { message: 'Unsupported algorithm' });
+});
+
 test('jwtUtils - fails on expired token', (t) => {
     // Expires in -1 seconds (already expired)
     const token = jwtUtils.sign({ id: 1 }, SECRET, -1);

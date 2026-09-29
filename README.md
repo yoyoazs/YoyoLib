@@ -23,8 +23,10 @@ const { createLogger } = require('yoyolib');
 const logger = createLogger(false, true, { level: 'info', maxSize: 10 }); // rotate at 10MB
 
 logger.info('Server started');
-const authLogger = logger.child({ module: 'auth' });
-authLogger.warn('Invalid login'); 
+logger.error(new Error('DB down')); // stack trace included
+
+const authLogger = logger.child('auth'); // or logger.child({ module: 'auth' })
+authLogger.warn('Invalid login');
 ```
 
 ### LangManager
@@ -62,13 +64,14 @@ Native cryptographic utilities using authenticated encryption.
 ```javascript
 const { jwtUtils, cryptoUtils } = require('yoyolib');
 
-// JWT (Native crypto implementation)
-const token = jwtUtils.sign({ id: 42 }, 'secret', { expiresIn: '1h' });
-const decoded = jwtUtils.verify(token, 'secret');
+// JWT (HS256, native crypto). expiresIn: seconds, '15m', '7d' or { expiresIn: '1h' }
+const token = jwtUtils.sign({ id: 42 }, 'secret', '1h');
+const decoded = jwtUtils.verify(token, 'secret'); // throws if invalid or expired
 
-// AES-256-GCM (Authenticated Encryption)
-const { encrypted, iv, tag } = cryptoUtils.encrypt('sensitive-data', '32-byte-key-placeholder-here-!!!');
-const plain = cryptoUtils.decrypt(encrypted, '32-byte-key-placeholder-here-!!!', iv, tag);
+// AES-256-GCM (Authenticated Encryption) — secret must be at least 32 chars
+const KEY = '32-byte-key-placeholder-here-!!!';
+const encrypted = cryptoUtils.encrypt('sensitive-data', KEY); // "iv:content:tag"
+const plain = cryptoUtils.decrypt(encrypted, KEY);
 ```
 
 ### DataMasker (GDPR)
@@ -99,12 +102,14 @@ if (!status.allowed) console.log(`Retry in ${status.resetIn}ms`);
 ## Network & Resilience
 
 ### Structured HTTP Client
-Wrapper over native `fetch` with structured JSON handling, timeouts, and bearer auth.
+Wrapper over native `fetch` with structured JSON handling, timeouts, bearer auth and smart retries.
+Only transient failures are retried (network errors, timeouts, 408, 429, 5xx) and `Retry-After` is honored.
 ```javascript
 const { httpClient } = require('yoyolib');
-const data = await httpClient.get('https://api.com/data', { 
-    timeout: 3000, 
-    attempts: 3 
+const data = await httpClient.get('https://api.com/data', {
+    timeout: 3000,
+    retries: 2,        // up to 3 attempts in total
+    query: { page: 1 },
 });
 ```
 
@@ -139,9 +144,10 @@ const report = await health.getStatus(); // { status: "UP", services: { ... } }
 
 ### ErrorReporter (Webhooks)
 Automated crash notifications to Discord, Slack, or any custom webhook.
+The payload format is detected from the URL (Discord embed, Slack text, raw JSON otherwise).
 ```javascript
 const { createErrorReporter } = require('yoyolib');
-const reporter = createErrorReporter('https://webhook.url');
+const reporter = createErrorReporter('https://discord.com/api/webhooks/...', { appName: 'MyBot' });
 
 reporter.initGlobalHandler(); // Catch all uncaught exceptions
 reporter.report(new Error('Manual report'), { severity: 'high' });
@@ -189,11 +195,20 @@ queue.push(async () => { ... });
 ```
 
 ### Scheduler
-Recurring task management.
+Recurring task management. Failing tasks never crash the process, and a slow run is never overlapped.
 ```javascript
 const { createScheduler } = require('yoyolib');
-const scheduler = createScheduler();
-scheduler.every('cleanup', 3600, () => runCleanup()); // every hour
+const scheduler = createScheduler({ onError: (err, task) => logger.error(err) });
+scheduler.every('cleanup', 3600, async () => runCleanup(), { immediate: true }); // now, then every hour
+```
+
+### Durations
+Human-friendly durations, handy for bot commands (`/mute @user 1h30m`) and cooldowns.
+```javascript
+const { parseDuration, formatDuration } = require('yoyolib');
+parseDuration('1h30m');                    // 5400000
+formatDuration(5400000);                   // "1h 30m"
+formatDuration(5400000, { long: true });   // "1 hour 30 minutes"
 ```
 
 ### Data Manipulation (Flatten & Path)
@@ -251,7 +266,7 @@ No data is sent anywhere else, and we collect zero analytics.
 - **Registry**: 0 external dependencies.
 - **Node.js**: Requires version 18.0.0 or higher.
 - **TypeScript**: Included `index.d.ts` for full intellisense.
-- **CI/CD**: Fully tested suite (70+ unit tests) on Node 18, 20, 22.
+- **CI/CD**: Fully tested suite (80+ unit tests) on Node 18, 20, 22.
 
 ---
 

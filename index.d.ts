@@ -32,7 +32,7 @@ export interface LoggerOptions {
 }
 
 export interface LogArgs {
-    content:   string;
+    content:   unknown;
     name?:     string;
     /** If false, skips console output. Default: true. */
     console?:  boolean;
@@ -43,11 +43,11 @@ export interface LogArgs {
 export declare class Logger {
     constructor(file: string, logDateAndHours: boolean, args?: LoggerOptions);
 
-    debug(args: string | LogArgs): void;
-    log(args:   string | LogArgs): void;
-    info(args:  string | LogArgs): void;
-    warn(args:  string | LogArgs): void;
-    error(args: string | LogArgs): void;
+    debug(args: string | Error | LogArgs | Record<string, unknown>): void;
+    log(args:   string | Error | LogArgs | Record<string, unknown>): void;
+    info(args:  string | Error | LogArgs | Record<string, unknown>): void;
+    warn(args:  string | Error | LogArgs | Record<string, unknown>): void;
+    error(args: string | Error | LogArgs | Record<string, unknown>): void;
 
     dir(message: any): void;
     table(table: any[]): void;
@@ -68,8 +68,8 @@ export declare class Logger {
     setColor(type: LogColorType, color: StyleKey): void;
     getColor(type: LogColorType): StyleKey;
 
-    /** Returns a new Logger instance, inheriting options but with a fixed name prefix */
-    child(name: string): Logger;
+    /** Returns a child Logger sharing the parent's stream, with a fixed name prefix. */
+    child(name: string | { name?: string; module?: string; [key: string]: unknown }): Logger;
 
     close(): void;
 }
@@ -219,15 +219,27 @@ export declare function createEnvLoader(filePath?: string): EnvLoader;
 
 // ─── Scheduler ────────────────────────────────────────────────────────────────
 
+export interface SchedulerOptions {
+    /** Called when a task throws or rejects. Default: console.error. */
+    onError?: (error: Error, taskName: string) => void;
+}
+
 export declare class Scheduler {
-    constructor();
-    every(name: string, seconds: number, callback: (...args: any[]) => any): this;
+    constructor(options?: SchedulerOptions);
+    every(name: string, seconds: number, callback: () => any, options?: { immediate?: boolean }): this;
     stop(name: string): boolean;
     list(): string[];
     clear(): this;
 }
 
-export declare function createScheduler(): Scheduler;
+export declare function createScheduler(options?: SchedulerOptions): Scheduler;
+
+// ─── Duration ─────────────────────────────────────────────────────────────────
+
+/** Parses "1h30m", "10s", "2 days"... into milliseconds. Plain numbers are milliseconds. */
+export declare function parseDuration(input: string | number): number;
+/** Formats milliseconds as "1h 30m" (or "1 hour 30 minutes" with long: true). */
+export declare function formatDuration(ms: number, options?: { long?: boolean; maxUnits?: number }): string;
 
 // ─── Validator ────────────────────────────────────────────────────────────────
 
@@ -283,17 +295,41 @@ export declare const cryptoUtils: {
 };
 
 export declare const jwtUtils: {
-    sign(payload: Record<string, any>, secret: string, expiresIn?: number): string;
+    /** expiresIn: seconds, a duration string ('15m', '7d') or { expiresIn }. Default: 24h. */
+    sign(payload: Record<string, any>, secret: string, expiresIn?: number | string | { expiresIn?: number | string }): string;
     verify(token: string, secret: string): Record<string, any>;
     decode(token: string): Record<string, any>;
 };
 
+export interface HttpRequestOptions extends Omit<RequestInit, 'headers'> {
+    headers?: Record<string, string>;
+    query?: Record<string, string | number | boolean>;
+    json?: unknown;
+    /** Extra attempts on network errors, timeouts, 408, 429 and 5xx. 4xx are never retried. Default: 0. */
+    retries?: number;
+    /** Delay in ms between retries when no Retry-After header is sent. Default: 500. */
+    retryDelay?: number;
+    /** Upper bound in ms for honoring Retry-After. Default: 30000. */
+    maxRetryAfter?: number;
+    timeout?: number;
+    bearer?: string;
+}
+
+export declare class HttpError extends Error {
+    status: number;
+    url: string;
+    data: any;
+    /** Parsed Retry-After header in ms, or null. */
+    retryAfter: number | null;
+}
+
 export declare const httpClient: {
-    request(url: string, options?: Record<string, any>): Promise<any>;
-    get(url: string, options?: Record<string, any>): Promise<any>;
-    post(url: string, options?: Record<string, any>): Promise<any>;
-    put(url: string, options?: Record<string, any>): Promise<any>;
-    delete(url: string, options?: Record<string, any>): Promise<any>;
+    HttpError: typeof HttpError;
+    request<T = any>(url: string, options?: HttpRequestOptions): Promise<T>;
+    get<T = any>(url: string, options?: HttpRequestOptions): Promise<T>;
+    post<T = any>(url: string, options?: HttpRequestOptions): Promise<T>;
+    put<T = any>(url: string, options?: HttpRequestOptions): Promise<T>;
+    delete<T = any>(url: string, options?: HttpRequestOptions): Promise<T>;
 };
 
 export declare class CircuitBreaker {
@@ -341,15 +377,30 @@ export declare class ContextTracker {
 
 export declare function createContextTracker(): ContextTracker;
 
+export interface ErrorReport {
+    appName: string;
+    message: string;
+    stack?: string;
+    context: Record<string, any>;
+}
+
+export interface ErrorReporterOptions {
+    appName?: string;
+    contextTracker?: ContextTracker;
+    /** 'auto' (default) detects Discord/Slack from the URL. A function builds a custom body. */
+    format?: 'auto' | 'discord' | 'slack' | 'raw' | ((report: ErrorReport) => unknown);
+}
+
 export declare class ErrorReporter {
-    constructor(webhookUrl: string, options?: { appName?: string, contextTracker?: ContextTracker });
+    constructor(webhookUrl: string, options?: ErrorReporterOptions);
+    buildPayload(report: ErrorReport): unknown;
     report(error: Error | string, extraContext?: Record<string, any>): Promise<void>;
     wrap<T extends (...args: any[]) => Promise<any>>(asyncFn: T): T;
     capture<T extends (...args: any[]) => any>(fn: T, ...args: Parameters<T>): ReturnType<T>;
     initGlobalHandler(): void;
 }
 
-export declare function createErrorReporter(webhookUrl: string, options?: { appName?: string, contextTracker?: ContextTracker }): ErrorReporter;
+export declare function createErrorReporter(webhookUrl: string, options?: ErrorReporterOptions): ErrorReporter;
 
 export declare class ShutdownManager {
     constructor(options?: { timeout?: number, log?: boolean });

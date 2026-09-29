@@ -23,3 +23,32 @@ test('Scheduler - Basic execution', async (t) => {
     
     scheduler.clear();
 });
+
+test('Scheduler - async failures go to onError instead of crashing', async () => {
+    const errors = [];
+    const scheduler = createScheduler({ onError: (err, name) => errors.push([name, err.message]) });
+
+    scheduler.every('fails', 0.05, async () => { throw new Error('nope'); });
+    await testSleep(130);
+    scheduler.clear();
+
+    assert.ok(errors.length >= 1);
+    assert.deepStrictEqual(errors[0], ['fails', 'nope']);
+});
+
+test('Scheduler - skips a run while the previous one is still pending', async () => {
+    const scheduler = createScheduler();
+    let concurrent = 0;
+    let maxConcurrent = 0;
+
+    scheduler.every('slow', 0.02, async () => {
+        concurrent++;
+        maxConcurrent = Math.max(maxConcurrent, concurrent);
+        await testSleep(80);
+        concurrent--;
+    }, { immediate: true });
+
+    await testSleep(200);
+    scheduler.clear();
+    assert.strictEqual(maxConcurrent, 1);
+});

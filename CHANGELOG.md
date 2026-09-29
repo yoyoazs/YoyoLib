@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- **JWT (security)**: `sign()` now accepts `'1h'` / `{ expiresIn: '1h' }` as documented. Previously these produced a string `exp` claim that `verify()` never treated as expired. `verify()` now rejects non-numeric `exp` claims and non-HS256 headers.
+- **ErrorReporter**: Discord webhooks now receive an embed payload (they rejected the previous body with HTTP 400). Slack webhooks receive a `text` payload. New `format` option (`'auto'`, `'discord'`, `'slack'`, `'raw'` or a function).
+- **httpClient**: `retries` only retries transient failures (network errors, timeouts, 408, 429, 5xx) and honors `Retry-After` (capped by `maxRetryAfter`). `HttpError` is exposed as `httpClient.HttpError` and carries `retryAfter`.
+- **Scheduler**: task errors (sync or async) go to an `onError` handler instead of crashing the process; a run is skipped while the previous one is still pending. New `{ immediate: true }` option.
+- **Logger**: `Error` objects are logged with their stack (and a `stack` field in JSON mode); plain objects are inspected instead of printing `[object Object]`. `child()` accepts `{ module: 'auth' }`, inherits the current level and shares the parent's file stream. Rotation no longer calls `statSync` on every line.
+- **README**: fixed wrong examples (JWT, cryptoUtils, httpClient `attempts`, logger child).
+
+### Added
+- `parseDuration('1h30m')` and `formatDuration(ms)` utilities.
+
 ## [5.0.0] - Upcoming
 
 ### Added (Major Refactoring & New Features - "God Mode")
