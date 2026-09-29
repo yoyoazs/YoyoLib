@@ -28,6 +28,7 @@ function fakeRedisServer() {
                 return 'OK';
             }
             case 'DEL': return rest.filter(k => data.delete(k)).length;
+            case 'MGET': return rest.map(k => { const e = live(k); return e ? e.value : null; });
             case 'PTTL': return pttl(rest[0]);
             case 'EVAL': {
                 assert.ok(rest[0].includes("redis.call('INCRBY'"), 'unexpected script');
@@ -72,8 +73,10 @@ async function exerciseStore(store) {
     assert.strictEqual(await store.get('missing'), null);
 
     await store.set('p:1', 1);
-    await store.set('p:2', 2);
+    await store.set('p:2', { two: 2 });
     await store.set('q:1', 3);
+    const entries = (await store.entries('p:')).sort(([a], [b]) => a.localeCompare(b));
+    assert.deepStrictEqual(entries, [['p:1', 1], ['p:2', { two: 2 }]]);
     assert.strictEqual(await store.deleteByPrefix('p:'), 2);
     assert.strictEqual(await store.get('q:1'), 3);
     assert.strictEqual(await store.delete('q:1'), true);

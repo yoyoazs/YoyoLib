@@ -274,6 +274,59 @@ export declare class Scheduler {
 
 export declare function createScheduler(options?: SchedulerOptions): Scheduler;
 
+// ─── JobScheduler ─────────────────────────────────────────────────────────────
+
+export interface Job<P = any> {
+    id: string;
+    name: string;
+    /** Epoch ms. */
+    runAt: number;
+    payload: P;
+    attempts: number;
+    maxAttempts: number;
+    createdAt: number;
+    lastError?: string;
+}
+
+export interface JobSchedulerOptions {
+    /** Must implement entries(). Default: MemoryStore (jobs lost on restart: use JsonFileStore or RedisStore). */
+    store?: Store & { entries(prefix: string): Promise<Array<[string, any]>> };
+    /** Default: '5s'. */
+    pollInterval?: string | number;
+    /** Default: 3. */
+    maxAttempts?: number;
+    /** First retry delay, doubled at each attempt. Default: '30s'. */
+    retryDelay?: string | number;
+    /** Max run time before another process may retry the job. Default: '5m'. */
+    lockTtl?: string | number;
+    /** Default: 5. */
+    concurrency?: number;
+    /** Default: 'jobs'. */
+    namespace?: string;
+    onError?: (error: Error, job: Job, final: boolean) => void;
+}
+
+/** Persistent one-off jobs, at-least-once, safe with several processes on a shared store. */
+export declare class JobScheduler {
+    constructor(options?: JobSchedulerOptions);
+    define<P = any>(name: string, handler: (payload: P, job: Job<P>) => any): this;
+    /** `id` makes the job unique: scheduling again with the same id replaces it. */
+    scheduleAt<P = any>(name: string, date: Date | number, payload?: P, options?: { id?: string; maxAttempts?: number }): Promise<Job<P>>;
+    scheduleIn<P = any>(name: string, delay: string | number, payload?: P, options?: { id?: string; maxAttempts?: number }): Promise<Job<P>>;
+    cancel(id: string): Promise<boolean>;
+    get(id: string): Promise<Job | null>;
+    /** Pending jobs, soonest first. */
+    list(name?: string): Promise<Job[]>;
+    /** Starts polling; overdue jobs run right away. */
+    start(): this;
+    /** Stops polling and waits for running jobs. */
+    stop(): Promise<void>;
+    /** Runs due jobs once. */
+    tick(): Promise<void>;
+}
+
+export declare function createJobScheduler(options?: JobSchedulerOptions): JobScheduler;
+
 // ─── Duration ─────────────────────────────────────────────────────────────────
 
 /** Parses "1h30m", "10s", "2 days"... into milliseconds. Plain numbers are milliseconds. */
@@ -975,6 +1028,8 @@ export interface Store {
     /** Ms left, null if no expiry, -1 if missing. */
     ttl(key: string): Promise<number | null>;
     deleteByPrefix(prefix: string): Promise<number>;
+    /** [key, value] pairs whose key starts with prefix. Optional: only JobScheduler needs it. */
+    entries?(prefix: string): Promise<Array<[string, any]>>;
 }
 
 export declare class MemoryStore implements Store {
@@ -985,6 +1040,8 @@ export declare class MemoryStore implements Store {
     increment(key: string, ttlMs: number, by?: number): Promise<{ value: number; ttl: number | null }>;
     ttl(key: string): Promise<number | null>;
     deleteByPrefix(prefix: string): Promise<number>;
+    /** [key, value] pairs whose key starts with prefix. */
+    entries(prefix: string): Promise<Array<[string, any]>>;
     close(): void;
 }
 
@@ -1008,6 +1065,8 @@ export declare class RedisStore implements Store {
     increment(key: string, ttlMs: number, by?: number): Promise<{ value: number; ttl: number | null }>;
     ttl(key: string): Promise<number | null>;
     deleteByPrefix(prefix: string): Promise<number>;
+    /** [key, value] pairs whose key starts with prefix. */
+    entries(prefix: string): Promise<Array<[string, any]>>;
 }
 
 // ─── Async (store-backed) variants ───────────────────────────────────────────

@@ -32,6 +32,8 @@ All notable changes to this project will be documented in this file.
   - `botPermissions` / `userPermissions` checks with readable messages; permission names validated at registration; `defaultMemberPermissions` accepts names.
   - `deploy({ onlyIfChanged: true })` skips unchanged commands (hash kept in `.yoyolib/commands-hash.json`); `commandsHash()`.
 - **Typed prefix arguments**: `args: [{ name, type, required, default, min, max, choices, regex }]` with types `string`, `number`, `integer`, `boolean`, `user`, `member`, `channel`, `role`, `snowflake`, `duration`, `rest`; skipping of non-matching optional arguments, automatic usage replies (`messages.usage`), `argResolvers`, `ArgumentError`. Parsing happens before the cooldown.
+- **JobScheduler**: persistent one-off jobs (`define`, `scheduleAt`, `scheduleIn`, `cancel`, `list`), overdue jobs run at start-up, retries with exponential backoff, atomic locks for several processes, jobs rescheduled while running are kept.
+- **Stores**: `entries(prefix)` on MemoryStore, JsonFileStore and RedisStore (MGET in batches).
 - **CommandRegistry `paginate()` / `confirm()`**: button menus restricted to the author, inactivity timeout that disables the buttons, works from slash (reply / deferred / replied) and prefix commands; `messages.sessionExpired` and `messages.notYourSession`.
 - **`yoyolib/testing`**: `mockInteraction`, `mockMessage`, `mockClient` to unit-test bots without Discord, following the API's acknowledgement rules.
 - **package.json**: `types` condition in `exports`, `./testing` and `./package.json` subpaths.

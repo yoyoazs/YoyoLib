@@ -510,6 +510,29 @@ formatDuration(5400000);                   // "1h 30m"
 formatDuration(5400000, { long: true });   // "1 hour 30 minutes"
 ```
 
+### JobScheduler (persistent one-off jobs)
+For "unmute in 2 hours", "end the giveaway on Friday", "remind me tomorrow". Unlike `Scheduler`, jobs are stored and
+survive restarts: jobs that became due while the bot was offline run at start-up.
+```javascript
+const { createJobScheduler, JsonFileStore } = require('yoyolib');
+const jobs = createJobScheduler({ store: new JsonFileStore({ file: 'data/jobs.json' }) }); // or a RedisStore
+
+jobs.define('unmute', async ({ guildId, userId }) => {
+    const guild = await client.guilds.fetch(guildId);
+    await guild.members.edit(userId, { communicationDisabledUntil: null });
+});
+jobs.start();
+
+await jobs.scheduleIn('unmute', '2h', { guildId, userId }, { id: `unmute:${guildId}:${userId}` }); // same id = replaced
+await jobs.scheduleAt('giveaway-end', new Date('2025-12-24T18:00:00Z'), { messageId });
+await jobs.cancel(`unmute:${guildId}:${userId}`);
+await jobs.list('unmute');
+```
+- Failing jobs are retried with backoff (`maxAttempts: 3`, `retryDelay: '30s'` doubled each time), then dropped (`onError`).
+- With several processes on one Redis store, each job runs once (atomic lock). Delivery is *at-least-once*: if a
+  process crashes during a job, the job runs again after `lockTtl`, so make handlers idempotent.
+- Payloads must be JSON-serializable. Stop with `await jobs.stop()` (e.g. from ShutdownManager).
+
 ### Data Manipulation (Flatten & Path)
 ```javascript
 const { ObjectFlatten, objectPath } = require('yoyolib');
