@@ -1,19 +1,29 @@
 {
   "name": "yoyolib",
-  "version": "5.0.1",
+  "version": "6.0.0",
   "description": "A lightweight, zero-dependency Node.js toolkit for Discord bots and SaaS: command registry, cooldowns, i18n, logging, config, cache, JWT, HTTP client, scheduler and utilities",
   "main": "index.js",
   "types": "index.d.ts",
+  "files": [
+    "index.js",
+    "index.mjs",
+    "index.d.ts",
+    "testing.d.ts",
+    "lib/",
+    "LICENSE",
+    "README.md",
+    "CHANGELOG.md"
+  ],
   "exports": {
     ".": {
       "types": "./index.d.ts",
       "require": "./index.js",
-      "import": "./index.js"
+      "import": "./index.mjs"
     },
     "./testing": {
       "types": "./testing.d.ts",
       "require": "./lib/testing/index.js",
-      "import": "./lib/testing/index.js"
+      "import": "./lib/testing/index.mjs"
     },
     "./package.json": "./package.json"
   },
