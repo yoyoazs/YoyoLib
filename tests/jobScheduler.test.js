@@ -13,20 +13,40 @@ test('JobScheduler - runs a job at its time with a copy of the payload', async (
     const runs = [];
     jobs.define('unmute', (payload, job) => { runs.push([payload, job.name, Date.now()]); payload.mutated = true; });
     jobs.start();
+    try {
+        const payload = { guildId: 'g', userId: 'u' };
+        const scheduledAt = Date.now();
+        const job = await jobs.scheduleIn('unmute', 40, payload);
+        payload.guildId = 'changed after scheduling';
 
-    const payload = { guildId: 'g', userId: 'u' };
-    const scheduledAt = Date.now();
-    const job = await jobs.scheduleIn('unmute', 40, payload);
-    payload.guildId = 'changed after scheduling';
+        await sleep(20);
+        assert.strictEqual(runs.length, 0);
+        await sleep(80);
+        assert.strictEqual(runs.length, 1);
+        assert.deepStrictEqual(runs[0][0], { guildId: 'g', userId: 'u', mutated: true });
+        assert.ok(runs[0][2] - scheduledAt >= 35, 'ran too early'); // the wake-up timer, not the 1m poll
+        assert.strictEqual(await jobs.get(job.id), null);
+    } finally {
+        await jobs.stop(); // a started scheduler keeps the process alive
+    }
+});
 
-    await sleep(20);
-    assert.strictEqual(runs.length, 0);
-    await sleep(60);
-    assert.strictEqual(runs.length, 1);
-    assert.deepStrictEqual(runs[0][0], { guildId: 'g', userId: 'u', mutated: true });
-    assert.ok(runs[0][2] - scheduledAt >= 35, 'ran too early'); // the wake-up timer, not the 1m poll
-    assert.strictEqual(await jobs.get(job.id), null);
-    await jobs.stop();
+test('JobScheduler - a wake-up timer firing before Date.now() reaches runAt still runs the job', async () => {
+    const jobs = createJobScheduler({ ...quiet, pollInterval: '1m' });
+    let ran = false;
+    jobs.define('x', () => { ran = true; });
+    jobs.start();
+    const realNow = Date.now;
+    try {
+        await jobs.scheduleIn('x', 20, {});
+        // The wall clock lags behind the timers (large lag: Windows timers fire late and would hide a small one)
+        Date.now = () => realNow() - 30;
+        await sleep(150);
+        assert.strictEqual(ran, true);
+    } finally {
+        Date.now = realNow;
+        await jobs.stop();
+    }
 });
 
 test('JobScheduler - jobs survive a restart (JsonFileStore)', async () => {
@@ -43,8 +63,11 @@ test('JobScheduler - jobs survive a restart (JsonFileStore)', async () => {
     const seen = [];
     second.define('reminder', (p) => seen.push(p.text));
     second.start();
-    await sleep(30);
-    await second.stop();
+    try {
+        await sleep(30);
+    } finally {
+        await second.stop();
+    }
 
     assert.deepStrictEqual(seen, ['drink water']);
     assert.deepStrictEqual((await second.list()).map(j => j.id), ['later']);
