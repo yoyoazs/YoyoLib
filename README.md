@@ -167,6 +167,26 @@ module.exports = { name: 'ping', description: 'Pong!', cooldown: '3s', execute: 
 `commands.ping.description` fill `name_localizations` / `description_localizations` in `toJSON()` and `deploy()`.
 Name your language files with Discord locale codes (`fr.json`, `en-US.json`...).
 
+**Pagination and confirmation**: built-in button menus, restricted to the author by default. Buttons are disabled
+after inactivity. They work from slash commands (reply, deferred or not) and from prefix commands.
+```javascript
+registry.slash({
+    name: 'warns', description: 'List warnings',
+    execute: (interaction, ctx) => ctx.registry.paginate(interaction, warnings.map(w => ({ embeds: [toEmbed(w)] })), { timeout: '2m' }),
+});
+
+registry.slash({
+    name: 'wipe', description: 'Delete all data',
+    execute: async (interaction, ctx) => {
+        const answer = await ctx.registry.confirm(interaction, 'Delete everything?', { danger: true, timeout: '30s' });
+        if (!answer.confirmed) return;                    // reason: 'cancelled' | 'timeout'
+        await wipe();
+        await answer.interaction.followUp('Deleted.');    // the button click, already acknowledged
+    },
+});
+```
+Menus live in memory: after a restart, old buttons answer "This menu has expired" (`messages.sessionExpired`).
+
 **Auto-defer**: Discord drops interactions that get no answer within 3 seconds. With `autoDefer: true` (globally or per
 handler), the registry calls `deferReply()` (`deferUpdate()` for buttons and selects) if the handler has not answered after
 2 s. Your code does not change: `interaction.reply()` and `interaction.update()` are rerouted to `editReply()` / `followUp()`.

@@ -749,6 +749,39 @@ export interface RegistryMessages {
     userPermissions(ctx: HandlerContext, missing: string[]): ReplyContent | Promise<ReplyContent>;
     /** Invalid prefix arguments; `usage` looks like "!ban <user> [duration] [reason...]". */
     usage(ctx: HandlerContext, error: ArgumentError, usage: string): ReplyContent | Promise<ReplyContent>;
+    /** Click on a paginate/confirm button whose session ended (timeout, restart). */
+    sessionExpired(ctx: HandlerContext): ReplyContent | Promise<ReplyContent>;
+    /** Click by someone else than the user the menu belongs to. */
+    notYourSession(ctx: HandlerContext): ReplyContent | Promise<ReplyContent>;
+}
+
+export interface PaginateOptions {
+    /** Who may turn pages (null = anyone). Default: the author. */
+    userId?: string | null;
+    /** Inactivity delay before the buttons are disabled. Default: '2m'. */
+    timeout?: string | number;
+    ephemeral?: boolean;
+    startPage?: number;
+    labels?: { prev?: string; next?: string };
+}
+
+export interface ConfirmOptions {
+    /** Who may answer (null = anyone). Default: the author. */
+    userId?: string | null;
+    /** Default: '30s'. */
+    timeout?: string | number;
+    ephemeral?: boolean;
+    confirmLabel?: string;
+    cancelLabel?: string;
+    /** Red confirm button. Default: false (green). */
+    danger?: boolean;
+}
+
+export interface ConfirmResult {
+    confirmed: boolean;
+    reason: 'confirmed' | 'cancelled' | 'timeout';
+    /** The button click, already acknowledged with update(): use followUp() / editReply(). null on timeout. */
+    interaction: any;
 }
 
 export interface CommandRegistryOptions {
@@ -799,6 +832,10 @@ export declare class CommandRegistry {
     handleInteraction(interaction: any): Promise<HandlerResult>;
     handleMessage(message: any): Promise<HandlerResult>;
     reply(target: any, content: ReplyContent): Promise<void>;
+    /** Sends pages with ◀ ▶ buttons. Reply, editReply or followUp is picked from the interaction state. */
+    paginate(target: any, pages: Array<string | Record<string, any>>, options?: PaginateOptions): Promise<{ id: string | null; stop(): Promise<void> }>;
+    /** Asks a yes/no question with buttons and waits for the answer. */
+    confirm(target: any, content: string | Record<string, any>, options?: ConfirmOptions): Promise<ConfirmResult>;
     /** Registers events and routes interactionCreate / messageCreate. */
     attach(client: any): this;
 
