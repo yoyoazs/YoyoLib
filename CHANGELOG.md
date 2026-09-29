@@ -10,6 +10,7 @@ All notable changes to this project will be documented in this file.
 - **httpClient**: `retries` only retries transient failures (network errors, timeouts, 408, 429, 5xx) and honors `Retry-After` (capped by `maxRetryAfter`). `HttpError` is exposed as `httpClient.HttpError` and carries `retryAfter`.
 - **Scheduler**: task errors (sync or async) go to an `onError` handler instead of crashing the process; a run is skipped while the previous one is still pending. New `{ immediate: true }` option.
 - **Logger**: `Error` objects are logged with their stack (and a `stack` field in JSON mode); plain objects are inspected instead of printing `[object Object]`. `child()` accepts `{ module: 'auth' }`, inherits the current level and shares the parent's file stream. Rotation no longer calls `statSync` on every line.
+- **objectPath (security)**: `set()` / `get()` / `has()` refuse `__proto__`, `constructor` and `prototype` segments (prototype pollution) and only follow own properties.
 - **README**: fixed wrong examples (JWT, cryptoUtils, httpClient `attempts`, logger child).
 
 ### Changed
@@ -30,6 +31,8 @@ All notable changes to this project will be documented in this file.
   - `autoDefer`: defers interactions not answered after 2 s (Discord's limit is 3 s) and reroutes `reply()` / `update()` so handlers need no change.
   - `botPermissions` / `userPermissions` checks with readable messages; permission names validated at registration; `defaultMemberPermissions` accepts names.
   - `deploy({ onlyIfChanged: true })` skips unchanged commands (hash kept in `.yoyolib/commands-hash.json`); `commandsHash()`.
+- **GuildSettings**: per-guild settings with defaults (only overrides are stored), schema validation (`type` incl. `snowflake`, `min`/`max`, `regex`, `choices`, `nullable`, custom `validate`), local cache with deduplicated reads, `reset()`, `for(guildId)`, and `ctx.settings` in CommandRegistry.
+- **JsonFileStore**: MemoryStore persisted to a JSON file with batched, atomic writes.
 - **discordPermissions**: permission flags, `resolvePermissions`, `missingPermissions`, `formatPermission`, `toBitfield`.
 - **CooldownManager**: per-key cooldowns with several uses per window, `check()` without consuming, `reset()`, automatic cleanup.
 - **Stores**: `MemoryStore` and `RedisStore` (bring your own ioredis or node-redis v4+ client) behind a small async `Store` interface. `RateLimiter`, `CooldownManager` and `CommandRegistry` accept `store` to share limits and cooldowns between processes or shards; their methods then return Promises.

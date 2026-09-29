@@ -611,6 +611,8 @@ export interface HandlerContext<T = any> {
     locale?: string | null;
     /** Set when the registry deferred the interaction automatically. */
     autoDeferred?: 'reply' | 'update';
+    /** Present when the registry has a `settings` option. */
+    settings?: BoundGuildSettings;
 }
 
 /** Permission names ('BanMembers', 'BAN_MEMBERS'), bits, or an array of them. */
@@ -735,6 +737,8 @@ export interface CommandRegistryOptions {
     onError?: (error: Error, ctx: HandlerContext) => any;
     /** Default autoDefer for every handler (overridable per handler). Default: false. */
     autoDefer?: boolean | AutoDeferOptions;
+    /** Exposes ctx.settings bound to the current guild. */
+    settings?: GuildSettings<any>;
 }
 
 export declare class CommandRegistry {
@@ -785,6 +789,67 @@ export declare class CommandRegistry {
 
 export declare function createCommandRegistry(options?: CommandRegistryOptions): CommandRegistry;
 
+// ─── Bot: GuildSettings ──────────────────────────────────────────────────────
+
+export interface SettingRule {
+    type?: 'string' | 'number' | 'boolean' | 'object' | 'array' | 'snowflake';
+    /** Min length (strings, arrays) or min value (numbers). */
+    min?: number;
+    max?: number;
+    regex?: RegExp;
+    choices?: any[];
+    /** Accept null (implicit when the default value is null). */
+    nullable?: boolean;
+    /** Return true to accept, or a string to reject with that message. */
+    validate?: (value: any) => true | string | void;
+}
+
+export interface GuildSettingsOptions<T extends Record<string, any> = Record<string, any>> {
+    /** Any Store. Default: MemoryStore (not persisted: use JsonFileStore or RedisStore). */
+    store?: Store;
+    defaults?: T;
+    /** Rules per dot-path key, e.g. { prefix: {...}, 'modules.music': {...} }. */
+    schema?: Record<string, SettingRule>;
+    /** Refuse keys missing from the schema. Default: true when a schema is given. */
+    strict?: boolean;
+    /** Local cache duration ('1m' or ms). 0 disables it. Default: 60000. */
+    cacheTtl?: number | string;
+    /** Key prefix in the store. Default: 'guild-settings'. */
+    namespace?: string;
+}
+
+export interface BoundGuildSettings<T extends Record<string, any> = Record<string, any>> {
+    readonly guildId: string | null;
+    get(): Promise<T>;
+    get<V = any>(key: string): Promise<V>;
+    set(key: string, value: any): Promise<T>;
+    set(patch: Record<string, any>): Promise<T>;
+    reset(key?: string): Promise<T>;
+}
+
+export declare class GuildSettings<T extends Record<string, any> = Record<string, any>> {
+    constructor(options?: GuildSettingsOptions<T>);
+    readonly store: Store;
+    readonly defaults: T;
+    /** Defaults merged with the guild's overrides. A falsy guildId (DMs) returns the defaults. */
+    get(guildId: string | null | undefined): Promise<T>;
+    get<V = any>(guildId: string | null | undefined, key: string): Promise<V>;
+    /** Only the values the guild changed. */
+    overrides(guildId: string): Promise<Partial<T>>;
+    /** Validates then writes. Throws ValidationError with a user-facing message. */
+    set(guildId: string, key: string, value: any): Promise<T>;
+    set(guildId: string, patch: Record<string, any>): Promise<T>;
+    /** Restores the default of one key, or of all keys. */
+    reset(guildId: string, key?: string): Promise<T>;
+    /** Removes everything stored for the guild (e.g. on guildDelete). */
+    delete(guildId: string): Promise<void>;
+    invalidate(guildId?: string): void;
+    for(guildId: string | null | undefined): BoundGuildSettings<T>;
+    validate(key: string, value: any): void;
+}
+
+export declare function createGuildSettings<T extends Record<string, any> = Record<string, any>>(options?: GuildSettingsOptions<T>): GuildSettings<T>;
+
 export declare const discordPermissions: {
     /** Permission name → bit, named like discord.js's PermissionFlagsBits. */
     readonly PermissionFlags: Readonly<Record<string, bigint>>;
@@ -820,6 +885,16 @@ export declare class MemoryStore implements Store {
     increment(key: string, ttlMs: number, by?: number): Promise<{ value: number; ttl: number | null }>;
     ttl(key: string): Promise<number | null>;
     deleteByPrefix(prefix: string): Promise<number>;
+    close(): void;
+}
+
+/** MemoryStore persisted to a JSON file (batched, atomic writes). Call close() on shutdown to flush. */
+export declare class JsonFileStore extends MemoryStore {
+    constructor(options?: { file?: string; writeDelay?: number; sweepInterval?: number });
+    readonly file: string;
+    /** Writes pending changes now. */
+    flush(): void;
+    /** Flushes and stops timers. */
     close(): void;
 }
 

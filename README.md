@@ -177,6 +177,49 @@ if (!res.ok) return reply(`Come back in ${res.remainingText}`); // "3 hours 12 m
 cooldowns.reset('daily', userId);
 ```
 
+### GuildSettings
+Per-guild settings (prefix, language, log channel, modules...) with defaults, validation and a local cache.
+Only the values a guild changed are stored, so a new default applies to every guild that did not override it.
+```javascript
+const { createGuildSettings, createCommandRegistry, JsonFileStore } = require('yoyolib');
+
+const settings = createGuildSettings({
+    store: new JsonFileStore({ file: 'data/settings.json' }), // or RedisStore, or your own Store
+    defaults: { prefix: '!', locale: 'en', logChannel: null, modules: { music: true } },
+    schema: {
+        prefix: { type: 'string', min: 1, max: 5 },
+        locale: { choices: ['en', 'fr'] },
+        logChannel: { type: 'snowflake' },          // Discord ID; null allowed because the default is null
+        'modules.music': { type: 'boolean' },
+    },
+});
+
+await settings.set(guildId, 'prefix', '?');         // throws ValidationError with a user-facing message
+await settings.set(guildId, { locale: 'fr', modules: { music: false } });
+await settings.get(guildId, 'prefix');              // '?'
+await settings.get(guildId);                        // full object, defaults merged
+await settings.reset(guildId, 'prefix');            // back to '!'
+
+// Wire it into the registry: per-guild prefix, per-guild language, ctx.settings in handlers
+const registry = createCommandRegistry({
+    settings,
+    prefix: (message) => settings.get(message.guildId, 'prefix'),
+    locale: (target) => settings.get(target.guildId, 'locale'),
+    lang,
+});
+registry.slash({
+    name: 'setlog', description: 'Set the log channel', defaultMemberPermissions: ['ManageGuild'],
+    options: [{ type: 7, name: 'channel', description: 'Channel', required: true }],
+    execute: async (interaction, ctx) => {
+        await ctx.settings.set('logChannel', interaction.options.getChannel('channel').id);
+        await ctx.reply('✅ Saved');
+    },
+});
+registry.event({ name: 'guildDelete', execute: (guild) => settings.delete(guild.id) });
+```
+Keys containing `__proto__`, `constructor` or `prototype` are always refused. With a schema, unknown keys are refused too.
+With several processes sharing a store, a change reaches the other processes after at most `cacheTtl` (default 1 minute).
+
 ---
 
 ## Security & Privacy
@@ -240,6 +283,12 @@ const registry = createCommandRegistry({ store }); // cooldowns shared by every 
 ```
 YoyoLib does not depend on Redis: you pass your own client. To use another backend, implement the async
 `Store` interface: `get`, `set`, `delete`, `increment`, `ttl`, `deleteByPrefix` (`MemoryStore` is the reference).
+
+For a single process without a database, `JsonFileStore` keeps the data in a JSON file (batched, atomic writes):
+```javascript
+const store = new JsonFileStore({ file: 'data/store.json' });
+shutdown.register('store', () => store.close()); // flush pending writes on exit (ShutdownManager)
+```
 
 ### Webhook verification
 Verify incoming webhooks and sign the ones your SaaS sends. Always pass the **raw** body, not a re-serialized
