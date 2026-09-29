@@ -6,6 +6,7 @@ A lightweight, **zero-dependency** Node.js toolkit for production-grade applicat
 
 ## Navigation
 - [Core Utilities](#core-utilities) (Logger, Lang, Config, Cache, EventBus, Env)
+- [Discord Bots](#discord-bots) (CommandRegistry, CooldownManager)
 - [Security & Privacy](#security--privacy) (JWT, AES, DataMasker, RateLimiter)
 - [Network & Resilience](#network--resilience) (HTTP Client, Circuit Breaker, API Utils)
 - [Monitoring & Lifecycle](#monitoring--lifecycle) (Health, Shutdown, ErrorReporter, Profiler)
@@ -66,6 +67,94 @@ const { createEnvLoader } = require('yoyolib');
 const env = createEnvLoader();
 const port = env.getNumber('PORT', 3000);
 const debug = env.getBool('DEBUG', false);
+```
+
+---
+
+## Discord Bots
+
+### CommandRegistry
+One router for **everything** a Discord bot handles: slash commands (with subcommands and groups), user and message
+context menus, autocomplete, buttons, select menus, modals, prefix commands and gateway events.
+It ships with cooldowns, permission checks, middlewares, error handling and deployment.
+It has no dependencies and works with discord.js v14+ objects as well as raw API payloads.
+
+```javascript
+const { Client, GatewayIntentBits } = require('discord.js');
+const { createCommandRegistry, createLangManager, CommandRegistry } = require('yoyolib');
+
+const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+const registry = createCommandRegistry({
+    ownerIds: ['123456789'],               // pass ownerOnly handlers, bypass cooldowns
+    lang: createLangManager({ autoLoad: true, fallback: 'en' }), // enables ctx.t
+    onError: (err, ctx) => logger.error(err),
+});
+
+// Slash command with subcommands ("sub" or "group sub")
+registry.slash({
+    name: 'ticket',
+    description: 'Manage tickets',
+    options: [/* raw API options, or pass a SlashCommandBuilder as `data` */],
+    cooldown: '10s',                       // or { duration: '1m', uses: 3, scope: 'guild' }
+    guildOnly: true,
+    subcommands: {
+        open: async (interaction, ctx) => {
+            const id = CommandRegistry.buildCustomId('ticket:close:{id}', { id: 42 });
+            await interaction.reply({ content: ctx.t('ticket.opened'), components: [/* button with customId: id */] });
+        },
+        'config set': { ownerOnly: true, execute: async (interaction) => { /* ... */ } },
+    },
+});
+
+// Components: exact id, pattern with params, or RegExp (named groups)
+registry.button({ id: 'ticket:close:{id}', execute: (interaction, ctx) => closeTicket(ctx.params.id) });
+registry.select({ id: 'role-picker', execute: (interaction) => interaction.values });
+registry.modal({ id: /^feedback:(?<userId>\d+)$/, execute: (interaction, ctx) => ctx.params.userId });
+
+// Context menus, autocomplete, events
+registry.userContext({ name: 'Profile', execute: (interaction) => { /* ... */ } });
+registry.messageContext({ name: 'Report', execute: (interaction) => { /* ... */ } });
+registry.slash({ name: 'search', description: 'Search', execute: runSearch, autocomplete: (i) => i.respond([]) });
+registry.event({ name: 'ready', once: true, execute: (client, ctx) => console.log('Ready!') });
+
+// Middlewares (logging, DB loading, blacklist...): skip next() to stop
+registry.use(async (ctx, next) => { const t = Date.now(); await next(); console.log(ctx.name, Date.now() - t, 'ms'); });
+
+registry.attach(client);                   // routes interactionCreate, messageCreate and events
+await registry.deploy({ token, applicationId, guildId }); // registers slash + context menus (omit guildId for global)
+client.login(token);
+```
+
+**Prefix commands**: `createCommandRegistry({ prefix: '!' })` accepts a string, an array or a function (for a per-guild prefix). Add `mentionPrefix: true` to also accept "@Bot command".
+```javascript
+registry.prefix({ name: 'say', aliases: ['echo'], execute: (message, args, ctx) => message.reply(args.join(' ')) });
+// !say hello "big world"  →  args = ['hello', 'big world']
+```
+
+**Loading from folders**: `registry.loadDir('./handlers')` loads files recursively. When a file does not set a
+`type`, it is taken from the folder name (`commands/`, `events/`, `buttons/`, `selects/`, `modals/`, `prefix/`,
+`user/`, `message/`). Files starting with `_` are ignored.
+```javascript
+// handlers/commands/ping.js
+module.exports = { name: 'ping', description: 'Pong!', cooldown: '3s', execute: (i) => i.reply('Pong!') };
+```
+
+**Localized commands**: with `lang` configured and `i18n: 'commands.ping'`, the keys `commands.ping.name` and
+`commands.ping.description` fill `name_localizations` / `description_localizations` in `toJSON()` and `deploy()`.
+Name your language files with Discord locale codes (`fr.json`, `en-US.json`...).
+
+Default replies (cooldown, guildOnly, ownerOnly, denied, error) are ephemeral and can be overridden through
+`messages: { cooldown: (ctx, res) => ctx.t('cooldown', { time: res.remainingText }) }`.
+
+### CooldownManager
+Standalone cooldowns (used internally by CommandRegistry).
+```javascript
+const { createCooldownManager } = require('yoyolib');
+const cooldowns = createCooldownManager();
+
+const res = cooldowns.hit('daily', userId, '24h');          // or { duration: '1m', uses: 3 }
+if (!res.ok) return reply(`Come back in ${res.remainingText}`); // "3 hours 12 minutes"
+cooldowns.reset('daily', userId);
 ```
 
 ---
@@ -279,7 +368,7 @@ No data is sent anywhere else, and we collect zero analytics.
 - **Registry**: 0 external dependencies.
 - **Node.js**: Requires version 18.0.0 or higher.
 - **TypeScript**: Included `index.d.ts` for full intellisense.
-- **CI/CD**: Fully tested suite (80+ unit tests) on Node 18, 20, 22.
+- **CI/CD**: Fully tested suite (110+ unit tests) on Node 18, 20, 22.
 
 ---
 

@@ -19,9 +19,15 @@ All notable changes to this project will be documented in this file.
   - pluralization via `Intl.PluralRules` (`one` / `other` / ..., optional `zero`) driven by `vars.count`;
   - `all(key)` for Discord `name_localizations`, `addResource()`, `has()`, `locales()`;
   - options `dir`, `autoLoad`, `fallback`, `defaultLocale`, `onMissing`;
-  - the first registered language becomes active; the constructor only requires the directory when `autoLoad` is set.
+  - the first registered language becomes active; the constructor only requires the directory when `autoLoad` is set;
+  - `fallback` / `defaultLocale` options may name languages registered later (e.g. with `addResource()`).
+
+### Removed
+- `lib/multiLang/multiLang.js`: unused duplicate of LangManager (it was never exported).
 
 ### Added
+- **CommandRegistry** (Discord bots): one router for slash commands (with subcommands and groups), user/message context menus, autocomplete, buttons, select menus, modals, prefix commands and gateway events. customId patterns (`ticket:close:{id}`) and RegExp, cooldowns (user/member/guild/channel/global scopes), `guildOnly` / `ownerOnly` / `check()`, middlewares, error handling with ephemeral replies, `ctx.t` from LangManager, `loadDir()` with type inference from folder names, `toJSON()` / `deploy()` to register commands through the Discord API. Works with discord.js v14+ objects and raw API payloads, without dependencies.
+- **CooldownManager**: per-key cooldowns with several uses per window, `check()` without consuming, `reset()`, automatic cleanup.
 - `parseDuration('1h30m')` and `formatDuration(ms)` utilities.
 
 ## [5.0.0] - Upcoming

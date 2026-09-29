@@ -516,6 +516,214 @@ export declare const ObjectFlatten: {
     unflatten(data: Record<string, any>): Record<string, any>;
 };
 
+// ─── Bot: CooldownManager ────────────────────────────────────────────────────
 
+export type CooldownRule = string | number | { duration: string | number; uses?: number };
 
+export interface CooldownResult {
+    /** False when the cooldown is active. */
+    ok: boolean;
+    /** Ms until the cooldown ends (0 when ok). */
+    remaining: number;
+    /** Human form of `remaining`, e.g. "4 seconds". */
+    remainingText: string;
+    /** Epoch ms when the window resets. */
+    resetAt: number;
+    usesLeft: number;
+    limit: number;
+}
 
+export declare class CooldownManager {
+    constructor(options?: { sweepInterval?: number });
+    /** Consumes one use of `id` in `bucket`. */
+    hit(bucket: string, id: string, rule: CooldownRule): CooldownResult;
+    /** Same as hit() without consuming. */
+    check(bucket: string, id: string, rule: CooldownRule): CooldownResult;
+    /** Resets one id, or the whole bucket. Returns the number of entries removed. */
+    reset(bucket: string, id?: string): number;
+    clear(): void;
+    sweep(): void;
+    destroy(): void;
+}
+
+export declare function createCooldownManager(options?: { sweepInterval?: number }): CooldownManager;
+
+// ─── Bot: CommandRegistry ────────────────────────────────────────────────────
+
+export type HandlerKind = 'slash' | 'userContext' | 'messageContext' | 'button' | 'select' | 'modal' | 'prefix' | 'event';
+
+export type RegistryStatus =
+    | 'ok' | 'stopped' | 'not_found' | 'ignored' | 'cooldown'
+    | 'denied' | 'guild_only' | 'owner_only' | 'error';
+
+export interface HandlerResult {
+    handled: boolean;
+    status: RegistryStatus;
+    kind?: HandlerKind | 'autocomplete';
+    name?: string;
+    cooldown?: CooldownResult;
+    error?: Error;
+}
+
+export interface HandlerContext<T = any> {
+    kind: HandlerKind | 'autocomplete';
+    /** Command name, or the full customId for components. */
+    name: string;
+    def: HandlerDefinition;
+    /** The interaction or message being handled. */
+    target: T;
+    client: any;
+    registry: CommandRegistry;
+    userId: string | null;
+    guildId: string | null;
+    channelId: string | null;
+    /** Values captured from a customId pattern or RegExp named groups. */
+    params: Record<string, string>;
+    /** Prefix command arguments (quotes supported). */
+    args: string[];
+    /** "sub" or "group sub" for slash commands. */
+    subcommand: string | null;
+    /** Prefix and alias used, for prefix commands. */
+    prefix?: string;
+    alias?: string;
+    /** Free space for middlewares. */
+    state: Record<string, any>;
+    /** Ephemeral reply (interaction) or reply (message). */
+    reply(content: string | Record<string, any>): Promise<void>;
+    /** Present when a LangManager is configured. */
+    t?: BoundTranslator;
+    locale?: string | null;
+}
+
+export type CooldownScope = 'user' | 'member' | 'guild' | 'channel' | 'global';
+
+export interface HandlerChecks<T = any> {
+    /** '5s', 3000, or { duration, uses, scope }. Default scope: 'user'. Owners bypass it. */
+    cooldown?: string | number | { duration: string | number; uses?: number; scope?: CooldownScope };
+    guildOnly?: boolean;
+    ownerOnly?: boolean;
+    /** Return true to allow, false to deny, or a string to deny with that message. */
+    check?: (target: T, ctx: HandlerContext<T>) => boolean | string | void | Promise<boolean | string | void>;
+}
+
+export type SubcommandHandler<T = any> =
+    | ((interaction: T, ctx: HandlerContext<T>) => any)
+    | (HandlerChecks<T> & {
+        execute: (interaction: T, ctx: HandlerContext<T>) => any;
+        autocomplete?: (interaction: T, ctx: HandlerContext<T>) => any;
+    });
+
+export interface CommandDefinitionBase<T = any> extends HandlerChecks<T> {
+    name?: string;
+    /** A builder (anything with toJSON(), e.g. SlashCommandBuilder) or a raw API object. */
+    data?: { toJSON(): any } | Record<string, any>;
+    /** LangManager key prefix: `<i18n>.name` and `<i18n>.description` fill the localizations. */
+    i18n?: string;
+    defaultMemberPermissions?: string | number | bigint;
+    contexts?: number[];
+    integrationTypes?: number[];
+    nsfw?: boolean;
+}
+
+export interface SlashDefinition<T = any> extends CommandDefinitionBase<T> {
+    type?: 'slash';
+    description?: string;
+    options?: any[];
+    execute?: (interaction: T, ctx: HandlerContext<T>) => any;
+    autocomplete?: (interaction: T, ctx: HandlerContext<T>) => any;
+    /** Keys are "sub" or "group sub". */
+    subcommands?: Record<string, SubcommandHandler<T>>;
+}
+
+export interface ContextMenuDefinition<T = any> extends CommandDefinitionBase<T> {
+    type?: 'userContext' | 'messageContext';
+    execute: (interaction: T, ctx: HandlerContext<T>) => any;
+}
+
+export interface ComponentDefinition<T = any> extends HandlerChecks<T> {
+    type?: 'button' | 'select' | 'modal';
+    /** Exact customId, a pattern like 'ticket:close:{id}', or a RegExp (named groups become params). */
+    id: string | RegExp;
+    execute: (interaction: T, ctx: HandlerContext<T>) => any;
+}
+
+export interface PrefixDefinition<T = any> extends HandlerChecks<T> {
+    type?: 'prefix';
+    name: string;
+    aliases?: string[];
+    description?: string;
+    execute: (message: T, args: string[], ctx: HandlerContext<T>) => any;
+}
+
+export interface EventDefinition {
+    type?: 'event';
+    name: string;
+    once?: boolean;
+    /** Receives the event arguments, then the context as last argument. */
+    execute: (...args: any[]) => any;
+}
+
+export type HandlerDefinition = SlashDefinition | ContextMenuDefinition | ComponentDefinition | PrefixDefinition | EventDefinition;
+
+type ReplyContent = string | Record<string, any>;
+
+export interface RegistryMessages {
+    cooldown(ctx: HandlerContext, result: CooldownResult): ReplyContent | Promise<ReplyContent>;
+    guildOnly(ctx: HandlerContext): ReplyContent | Promise<ReplyContent>;
+    ownerOnly(ctx: HandlerContext): ReplyContent | Promise<ReplyContent>;
+    denied(ctx: HandlerContext): ReplyContent | Promise<ReplyContent>;
+    error(ctx: HandlerContext, error: Error): ReplyContent | Promise<ReplyContent>;
+}
+
+export interface CommandRegistryOptions {
+    /** Prefix(es) for prefix commands, or a function (e.g. per-guild prefix). */
+    prefix?: string | string[] | ((message: any) => string | string[] | Promise<string | string[]>);
+    /** Also accept "@Bot command". Requires attach(). */
+    mentionPrefix?: boolean;
+    /** Owners pass ownerOnly handlers and bypass cooldowns. */
+    ownerIds?: string[];
+    cooldowns?: CooldownManager;
+    lang?: LangManager;
+    /** Locale used for ctx.t. Default: interaction locale, then guild locale. */
+    locale?: (target: any, ctx: HandlerContext) => string | null | Promise<string | null>;
+    messages?: Partial<RegistryMessages>;
+    onError?: (error: Error, ctx: HandlerContext) => any;
+}
+
+export declare class CommandRegistry {
+    constructor(options?: CommandRegistryOptions);
+    readonly cooldowns: CooldownManager;
+    client: any;
+
+    register(def: HandlerDefinition | HandlerDefinition[]): this;
+    slash(def: Omit<SlashDefinition, 'type'>): this;
+    userContext(def: Omit<ContextMenuDefinition, 'type'>): this;
+    messageContext(def: Omit<ContextMenuDefinition, 'type'>): this;
+    button(def: Omit<ComponentDefinition, 'type'>): this;
+    select(def: Omit<ComponentDefinition, 'type'>): this;
+    modal(def: Omit<ComponentDefinition, 'type'>): this;
+    prefix(def: Omit<PrefixDefinition, 'type'>): this;
+    event(def: Omit<EventDefinition, 'type'>): this;
+    /** Middleware run before every command/component handler. */
+    use(fn: (ctx: HandlerContext, next: () => Promise<void>) => any): this;
+    /** Recursively loads handler files; type inferred from folder names when missing. */
+    loadDir(dir: string): this;
+
+    get(kind: HandlerKind, name: string): HandlerDefinition | undefined;
+    list(kind: HandlerKind): HandlerDefinition[];
+
+    handleInteraction(interaction: any): Promise<HandlerResult>;
+    handleMessage(message: any): Promise<HandlerResult>;
+    reply(target: any, content: ReplyContent): Promise<void>;
+    /** Registers events and routes interactionCreate / messageCreate. */
+    attach(client: any): this;
+
+    /** Application command payloads (slash + context menus). */
+    toJSON(): Record<string, any>[];
+    /** Overwrites the application commands (globally or in one guild). */
+    deploy(options: { token: string; applicationId: string; guildId?: string }): Promise<any[]>;
+
+    static buildCustomId(pattern: string, params?: Record<string, string | number>): string;
+}
+
+export declare function createCommandRegistry(options?: CommandRegistryOptions): CommandRegistry;
