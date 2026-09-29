@@ -1,4 +1,4 @@
-# YoyoLib v5.0.0
+# YoyoLib v6.0.0
 
 A lightweight, **zero-dependency** Node.js toolkit for production-grade applications. Built for performance and reliability without the bloat of external `node_modules`.
 
