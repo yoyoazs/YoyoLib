@@ -198,6 +198,26 @@ if (!res.ok) return reply(`Come back in ${res.remainingText}`); // "3 hours 12 m
 cooldowns.reset('daily', userId);
 ```
 
+### Testing your bot (`yoyolib/testing`)
+Fake discord.js-like interactions, messages and clients, to unit-test handlers without connecting to Discord.
+They follow Discord's rules: acknowledging twice fails (40060), `editReply` needs a prior acknowledgement, and
+`replied` / `deferred` only change once the simulated API call resolves (`latency` option).
+```javascript
+const { mockInteraction, mockMessage, mockClient } = require('yoyolib/testing');
+
+const i = mockInteraction({ name: 'ban', options: { user: { id: '42' } }, appPermissions: ['BanMembers'] });
+const result = await registry.handleInteraction(i);
+assert.strictEqual(result.status, 'ok');
+assert.strictEqual(i.lastReply().content, 'Banned 42');
+assert.deepStrictEqual(i.methods(), ['deferReply', 'editReply']);
+
+// Also: type 'button' | 'select' | 'modal' | 'autocomplete' | 'userContext' | 'messageContext',
+// subcommand: 'group sub', values, fields, focused, guildId: null (DM), memberPermissions, latency
+const msg = mockMessage({ content: '!purge 10', botPermissions: ['ManageMessages'] });
+await registry.handleMessage(msg);
+msg.lastReply().content;
+```
+
 ### discordFormat
 Formatting helpers and API limits.
 ```javascript

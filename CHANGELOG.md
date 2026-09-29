@@ -32,6 +32,8 @@ All notable changes to this project will be documented in this file.
   - `botPermissions` / `userPermissions` checks with readable messages; permission names validated at registration; `defaultMemberPermissions` accepts names.
   - `deploy({ onlyIfChanged: true })` skips unchanged commands (hash kept in `.yoyolib/commands-hash.json`); `commandsHash()`.
 - **Typed prefix arguments**: `args: [{ name, type, required, default, min, max, choices, regex }]` with types `string`, `number`, `integer`, `boolean`, `user`, `member`, `channel`, `role`, `snowflake`, `duration`, `rest`; skipping of non-matching optional arguments, automatic usage replies (`messages.usage`), `argResolvers`, `ArgumentError`. Parsing happens before the cooldown.
+- **`yoyolib/testing`**: `mockInteraction`, `mockMessage`, `mockClient` to unit-test bots without Discord, following the API's acknowledgement rules.
+- **package.json**: `types` condition in `exports`, `./testing` and `./package.json` subpaths.
 - **discordFormat**: `timestamp`, mentions, `escapeMarkdown`, `codeBlock`, `inlineCode`, `truncate`, `splitMessage` and `LIMITS`.
 - **GuildSettings**: per-guild settings with defaults (only overrides are stored), schema validation (`type` incl. `snowflake`, `min`/`max`, `regex`, `choices`, `nullable`, custom `validate`), local cache with deduplicated reads, `reset()`, `for(guildId)`, and `ctx.settings` in CommandRegistry.
 - **JsonFileStore**: MemoryStore persisted to a JSON file with batched, atomic writes.

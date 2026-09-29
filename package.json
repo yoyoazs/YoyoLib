@@ -6,9 +6,16 @@
   "types": "index.d.ts",
   "exports": {
     ".": {
+      "types": "./index.d.ts",
       "require": "./index.js",
       "import": "./index.js"
-    }
+    },
+    "./testing": {
+      "types": "./testing.d.ts",
+      "require": "./lib/testing/index.js",
+      "import": "./lib/testing/index.js"
+    },
+    "./package.json": "./package.json"
   },
   "directories": {
     "lib": "lib"
